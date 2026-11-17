@@ -12,6 +12,7 @@ struct KesProject
     QString mapsDir;
     QString materialsDir;
     QString texturesDir;
+    QString configDir;     // <project folder>/config, the folder the engine ships next to the exe
 
     bool isValid() const { return !filePath.isEmpty(); }
 

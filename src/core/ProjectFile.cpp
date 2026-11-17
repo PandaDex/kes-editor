@@ -75,6 +75,7 @@ bool KesProject::load(const QString &path, KesProject &out, QString *error)
     out.mapsDir = QDir::cleanPath(root.absoluteFilePath("maps"));
     out.materialsDir = QDir::cleanPath(root.absoluteFilePath("materials"));
     out.texturesDir = QDir::cleanPath(root.absoluteFilePath("textures"));
+    out.configDir = QDir::cleanPath(projectDir.absoluteFilePath("config"));
 
     if (!root.exists())
     {

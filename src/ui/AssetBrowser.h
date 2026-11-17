@@ -4,6 +4,7 @@
 
 class AssetFilterModel;
 class AssetImporter;
+class FolderFilterModel;
 class EditorContext;
 class QFileSystemModel;
 class QLabel;
@@ -35,6 +36,7 @@ protected:
 private:
     void setRoot(const QString &dir);
     void showFolder(const QString &dir);
+    void openEntry(const QString &path);
     QString materialPath(const QModelIndex &proxyIndex) const;
     void applyToSelection(const QString &material);
     void showContextMenu(const QPoint &pos);
@@ -43,6 +45,7 @@ private:
     EditorContext *m_ctx;
     AssetImporter *m_importer;
     QFileSystemModel *m_dirs;
+    FolderFilterModel *m_dirProxy;
     QFileSystemModel *m_files;
     AssetFilterModel *m_proxy;
     QTreeView *m_tree;

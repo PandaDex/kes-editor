@@ -22,6 +22,7 @@ const QMap<QString, QString> kAssetEditors = {
     { "kmodel", "kesModelEditor" },
     { "kanimgraph", "kesModelEditor" },
     { "imap", "kesInputEditor" },
+    { "po", "kesLocalizationEditor {project}" },
 
     { "rml", "code {root} {file}|notepad" },
     { "rcss", "code {root} {file}|notepad" },

@@ -72,6 +72,7 @@ namespace
             {"ksound", QColor(220, 140, 50)}, {"wav", QColor(220, 140, 50)}, {"mp3", QColor(220, 140, 50)},
             {"ogg", QColor(220, 140, 50)},
             {"rml", QColor(50, 160, 170)}, {"rcss", QColor(50, 160, 170)},
+            {"po", QColor(190, 90, 140)},
             {"slangnodes", QColor(200, 170, 50)}, {"slang", QColor(200, 170, 50)}, {"shader", QColor(200, 170, 50)},
         };
         return colors.value(suffix, QColor(100, 100, 110));
@@ -100,6 +101,26 @@ namespace
         p.drawText(QRectF(6, kThumb - 24, kThumb - 12, 20), Qt::AlignCenter, suffix.toUpper());
         p.end();
         return cache.insert(suffix, QIcon(pixmap)).value();
+    }
+
+    QIcon folderIcon()
+    {
+        static const QIcon icon = []
+        {
+            QPixmap pixmap(kThumb, kThumb);
+            pixmap.fill(Qt::transparent);
+            QPainter p(&pixmap);
+            p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(170, 135, 60));
+            p.drawRoundedRect(QRectF(6, 12, 24, 12), 3, 3);
+            p.drawRoundedRect(QRectF(6, 16, kThumb - 12, kThumb - 28), 4, 4);
+            p.setBrush(QColor(215, 175, 85));
+            p.drawRoundedRect(QRectF(6, 22, kThumb - 12, kThumb - 34), 4, 4);
+            p.end();
+            return QIcon(pixmap);
+        }();
+        return icon;
     }
 }
 
@@ -151,10 +172,20 @@ public:
                 }
             }
             const QFileInfo info = m_files->fileInfo(mapToSource(index));
+            if (info.isDir())
+                return folderIcon();
             if (info.isFile())
                 return typeIcon(info.suffix().toLower());
         }
         return QSortFilterProxyModel::data(index, role);
+    }
+
+    Qt::ItemFlags flags(const QModelIndex &index) const override
+    {
+        Qt::ItemFlags f = QSortFilterProxyModel::flags(index);
+        if (m_files->isDir(mapToSource(index)))
+            f &= ~Qt::ItemIsDragEnabled;
+        return f;
     }
 
     Qt::DropActions supportedDragActions() const override { return Qt::CopyAction; }
@@ -173,18 +204,54 @@ private:
     mutable QHash<QString, QIcon> m_thumbnails;
 };
 
+// When the tree is rooted at the project folder, only the listed top-level folders (content, config) are shown.
+class FolderFilterModel : public QSortFilterProxyModel
+{
+public:
+    FolderFilterModel(QFileSystemModel *dirs, QObject *parent) : QSortFilterProxyModel(parent), m_dirs(dirs)
+    {
+        setSourceModel(dirs);
+    }
+
+    void setRoots(const QString &parent, const QStringList &shown)
+    {
+        beginFilterChange();
+        m_parent = parent;
+        m_shown = shown;
+        endFilterChange(QSortFilterProxyModel::Direction::Rows);
+    }
+
+protected:
+    bool filterAcceptsRow(int row, const QModelIndex &parent) const override
+    {
+        if (m_parent.isEmpty() || QDir(m_dirs->filePath(parent)) != QDir(m_parent))
+            return true;
+        const QDir dir(m_dirs->filePath(m_dirs->index(row, 0, parent)));
+        for (const QString &shown : m_shown)
+            if (dir == QDir(shown))
+                return true;
+        return false;
+    }
+
+private:
+    QFileSystemModel *m_dirs;
+    QString m_parent;
+    QStringList m_shown;
+};
+
 AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget *parent)
     : QWidget(parent), m_ctx(ctx), m_importer(importer)
 {
     m_dirs = new QFileSystemModel(this);
     m_dirs->setFilter(QDir::AllDirs | QDir::NoDotAndDotDot);
+    m_dirProxy = new FolderFilterModel(m_dirs, this);
     m_files = new QFileSystemModel(this);
-    m_files->setFilter(QDir::Files);
+    m_files->setFilter(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
     m_files->setNameFilterDisables(false);
     m_proxy = new AssetFilterModel(ctx, m_files, this);
 
     m_tree = new QTreeView(this);
-    m_tree->setModel(m_dirs);
+    m_tree->setModel(m_dirProxy);
     for (int c = 1; c < 4; ++c)
         m_tree->hideColumn(c);
     m_tree->setHeaderHidden(true);
@@ -256,7 +323,7 @@ AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget 
     lay->addWidget(split);
 
     connect(m_tree, &QTreeView::clicked, this, [this](const QModelIndex &i)
-            { showFolder(m_dirs->filePath(i)); });
+            { showFolder(m_dirs->filePath(m_dirProxy->mapToSource(i))); });
     connect(m_filter, &QLineEdit::textChanged, this, [this](const QString &t)
             { m_files->setNameFilters(t.isEmpty() ? QStringList() : QStringList{"*" + t + "*"}); });
     connect(m_list, &QListView::clicked, this, [this](const QModelIndex &i)
@@ -265,7 +332,7 @@ AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget 
         if (!material.isEmpty())
             m_ctx->setCurrentMaterial(material); });
     connect(m_list, &QListView::doubleClicked, this, [this](const QModelIndex &i)
-            { openAsset(m_files->filePath(m_proxy->mapToSource(i))); });
+            { openEntry(m_files->filePath(m_proxy->mapToSource(i))); });
     connect(m_list, &QListView::customContextMenuRequested, this, &AssetBrowser::showContextMenu);
     connect(refresh, &QToolButton::clicked, this, [this]
             { m_ctx->materials()->reload(); });
@@ -285,8 +352,22 @@ AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget 
 
 void AssetBrowser::setRoot(const QString &dir)
 {
-    m_dirs->setRootPath(dir);
-    m_tree->setRootIndex(m_dirs->index(dir));
+    // With a project whose config folder sits next to the content folder, the tree shows both.
+    const KesProject &project = m_ctx->project();
+    const QString parent = QFileInfo(dir).absolutePath();
+    const bool withConfig = project.isValid() && QDir(project.configDir).exists() &&
+                            QDir(QFileInfo(project.configDir).absolutePath()) == QDir(parent);
+    const QString treeRoot = withConfig ? parent : dir;
+
+    m_dirProxy->setRoots(withConfig ? parent : QString(), {dir, project.configDir});
+    m_dirs->setRootPath(treeRoot);
+    m_tree->setRootIndex(m_dirProxy->mapFromSource(m_dirs->index(treeRoot)));
+    const QModelIndex content = m_dirProxy->mapFromSource(m_dirs->index(dir));
+    if (withConfig)
+    {
+        m_tree->expand(content);
+        m_tree->setCurrentIndex(content);
+    }
     showFolder(dir);
 }
 
@@ -303,6 +384,22 @@ QString AssetBrowser::targetFolder() const
     if (m_folder.isEmpty() || root.isEmpty() || QDir(m_folder) == QDir(root))
         return {};
     return m_folder;
+}
+
+void AssetBrowser::openEntry(const QString &path)
+{
+    if (QFileInfo(path).isDir())
+    {
+        const QModelIndex index = m_dirProxy->mapFromSource(m_dirs->index(path));
+        m_tree->expand(index.parent());
+        m_tree->setCurrentIndex(index);
+        m_tree->scrollTo(index);
+        showFolder(path);
+    }
+    else
+    {
+        openAsset(path);
+    }
 }
 
 void AssetBrowser::openAsset(const QString &path)
@@ -330,7 +427,7 @@ void AssetBrowser::createFromTemplate(const AssetTemplate &tmpl, const QString &
 void AssetBrowser::reveal(const QString &path)
 {
     const QString dir = QFileInfo(path).absolutePath();
-    m_tree->setCurrentIndex(m_dirs->index(dir));
+    m_tree->setCurrentIndex(m_dirProxy->mapFromSource(m_dirs->index(dir)));
     showFolder(dir);
     // The file model fills in the new file asynchronously.
     QTimer::singleShot(250, this, [this, path]
@@ -434,6 +531,18 @@ void AssetBrowser::showContextMenu(const QPoint &pos)
         return;
     }
     const QString file = m_files->filePath(m_proxy->mapToSource(index));
+    if (QFileInfo(file).isDir())
+    {
+        QAction *open = menu.addAction(tr("Open"), this, [this, file]
+                                       { openEntry(file); });
+        QFont bold = open->font();
+        bold.setBold(true);
+        open->setFont(bold);
+        menu.addAction(tr("Show in Explorer"), this, [file]
+                       { QDesktopServices::openUrl(QUrl::fromLocalFile(file)); });
+        menu.exec(m_list->viewport()->mapToGlobal(pos));
+        return;
+    }
     const QString material = materialPath(index);
 
     const QString editor = AssetEditors::editorLabel(file);
