@@ -59,6 +59,12 @@ public:
     bool saveCopy(const QString &path, QString *error = nullptr) const;
     QByteArray serialize(const QSet<ObjectId> &only = {}) const;
     QString filePath() const { return m_path; }
+    // The map file was renamed or moved on disk; the contents and clean state stay as they are.
+    void setFilePath(const QString &path)
+    {
+        m_path = path;
+        emit pathChanged();
+    }
     bool isModified() const { return !m_undo.isClean(); }
 
     // Internal: used by undo commands. Call notifyChanged() once after a batch.

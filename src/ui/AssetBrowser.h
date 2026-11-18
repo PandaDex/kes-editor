@@ -6,6 +6,7 @@ class AssetFilterModel;
 class AssetImporter;
 class FolderFilterModel;
 class EditorContext;
+class QDropEvent;
 class QFileSystemModel;
 class QLabel;
 class QListView;
@@ -41,6 +42,16 @@ private:
     void applyToSelection(const QString &material);
     void showContextMenu(const QPoint &pos);
     void updateCurrent();
+    QStringList selectedPaths() const;
+    QStringList draggedEntries(const QDropEvent *e) const;
+    bool canMoveInto(const QStringList &entries, const QString &folder) const;
+    bool handleTreeDrop(QEvent *event);
+    void renameEntry(const QString &path);
+    void chooseMoveTarget(const QStringList &paths);
+    void moveEntries(const QStringList &paths, const QString &folder);
+    void relocate(const QList<QPair<QString, QString>> &moves);
+    void deleteEntries(const QStringList &paths);
+    void createFolder(const QString &parent);
 
     EditorContext *m_ctx;
     AssetImporter *m_importer;

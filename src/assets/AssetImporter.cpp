@@ -1,6 +1,7 @@
 #include "assets/AssetImporter.h"
 #include "assets/AssetEditors.h"
 #include "assets/AssetTypeMap.h"
+#include "assets/ModelImportDialog.h"
 #include "core/EditorContext.h"
 #include <QDir>
 #include <QFileDialog>
@@ -73,6 +74,18 @@ void AssetImporter::import(const QStringList &files, const QString &destFolder)
         return;
     }
 
+    QStringList models;
+    for (const QString &file : files)
+    {
+        const ImportRule *rule = ruleFor(file);
+        if (rule && rule->output == "kmodel")
+            models << file;
+    }
+    ModelImportChoice modelChoice;
+    if (!models.isEmpty() && !ModelImportDialog::ask(models, content, m_parent, modelChoice))
+        return;
+    const bool animationsOnly = !modelChoice.mesh;
+
     QList<Job> jobs;
     QStringList existing;
     for (const QString &file : files)
@@ -84,11 +97,22 @@ void AssetImporter::import(const QStringList &files, const QString &destFolder)
             continue;
         }
         const QString folder = destFolder.isEmpty() ? QDir(content).absoluteFilePath(rule->folder) : destFolder;
-        QDir().mkpath(folder);
         Job job;
         job.input = QFileInfo(file).absoluteFilePath();
         job.output = QDir(folder).absoluteFilePath(QFileInfo(file).completeBaseName() + "." + rule->output);
-        if (QFileInfo::exists(job.output))
+        if (rule->output == "kmodel")
+        {
+            job.writesFile = modelChoice.mesh;
+            job.writesClips = modelChoice.animations;
+            if (!modelChoice.mesh)
+                job.flags << "--no-mesh";
+            if (!modelChoice.animations)
+                job.flags << "--no-anims";
+            if (animationsOnly && !modelChoice.targetModel.isEmpty())
+                job.output = QFileInfo(modelChoice.targetModel).absoluteFilePath();
+        }
+        QDir().mkpath(QFileInfo(job.output).absolutePath());
+        if (job.writesFile && QFileInfo::exists(job.output))
             existing << QDir(content).relativeFilePath(job.output);
         jobs << job;
     }
@@ -104,7 +128,7 @@ void AssetImporter::import(const QStringList &files, const QString &destFolder)
             return;
         if (answer == QMessageBox::No)
             jobs.erase(std::remove_if(jobs.begin(), jobs.end(), [](const Job &j)
-                                      { return QFileInfo::exists(j.output); }),
+                                      { return j.writesFile && QFileInfo::exists(j.output); }),
                        jobs.end());
     }
 
@@ -154,7 +178,8 @@ void AssetImporter::startNext()
             {
         if (error == QProcess::FailedToStart)
             finishJob(-1, true); });
-    m_process->start(m_program, {QDir::toNativeSeparators(m_current.input), QDir::toNativeSeparators(m_current.output)});
+    m_process->start(m_program, QStringList(m_current.flags) << QDir::toNativeSeparators(m_current.input)
+                                                               << QDir::toNativeSeparators(m_current.output));
 }
 
 void AssetImporter::finishJob(int exitCode, bool crashed)
@@ -168,16 +193,28 @@ void AssetImporter::finishJob(int exitCode, bool crashed)
     process->deleteLater();
 
     const QString content = m_ctx->projectDir();
-    const bool ok = exitCode == 0 && !crashed && QFileInfo::exists(m_current.output);
+    const bool ok = exitCode == 0 && !crashed && (!m_current.writesFile || QFileInfo::exists(m_current.output));
     if (ok)
     {
-        m_outputs << m_current.output;
-        m_ctx->log(tr("Imported %1").arg(QDir(content).relativeFilePath(m_current.output)));
+        if (m_current.writesFile)
+        {
+            m_outputs << m_current.output;
+            m_ctx->log(tr("Imported %1").arg(QDir(content).relativeFilePath(m_current.output)));
+        }
+        else
+        {
+            m_ctx->log(tr("Imported animations from %1").arg(QFileInfo(m_current.input).fileName()));
+        }
         if (m_current.output.endsWith(".ktex", Qt::CaseInsensitive))
             m_texturesChanged = true;
 
+        // The importer prints warnings (e.g. tracks it couldn't retarget) even on success.
+        for (const QString &line : output.split('\n'))
+            if (line.startsWith("Warning:"))
+                m_ctx->log(line.trimmed(), LogLevel::Warning);
+
         const QFileInfo model(m_current.output);
-        if (model.suffix().compare("kmodel", Qt::CaseInsensitive) == 0)
+        if (m_current.writesClips)
         {
             const QFileInfoList clips = model.dir().entryInfoList({model.completeBaseName() + "_*.kanim"}, QDir::Files);
             for (const QFileInfo &clip : clips)

@@ -1,6 +1,7 @@
 #include "ui/AssetBrowser.h"
 #include "ui/KesStyle.h"
 #include "assets/AssetEditors.h"
+#include "assets/AssetFileOps.h"
 #include "assets/AssetImporter.h"
 #include "assets/AssetTemplates.h"
 #include "core/EditorContext.h"
@@ -11,14 +12,19 @@
 #include <QDropEvent>
 #include <QMimeData>
 #include <QTimer>
+#include <QFileDialog>
 #include <QFileSystemModel>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QInputDialog>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListView>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPainter>
+#include <QShortcut>
 #include <QSortFilterProxyModel>
 #include <QSplitter>
 #include <QToolButton>
@@ -180,14 +186,6 @@ public:
         return QSortFilterProxyModel::data(index, role);
     }
 
-    Qt::ItemFlags flags(const QModelIndex &index) const override
-    {
-        Qt::ItemFlags f = QSortFilterProxyModel::flags(index);
-        if (m_files->isDir(mapToSource(index)))
-            f &= ~Qt::ItemIsDragEnabled;
-        return f;
-    }
-
     Qt::DropActions supportedDragActions() const override { return Qt::CopyAction; }
 
 protected:
@@ -255,6 +253,10 @@ AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget 
     for (int c = 1; c < 4; ++c)
         m_tree->hideColumn(c);
     m_tree->setHeaderHidden(true);
+    // Folders in the tree take files dragged from the grid (move) and from outside (import).
+    m_tree->setAcceptDrops(true);
+    m_tree->viewport()->setAcceptDrops(true);
+    m_tree->viewport()->installEventFilter(this);
 
     m_list = new QListView(this);
     m_list->setModel(m_proxy);
@@ -265,11 +267,18 @@ AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget 
     m_list->setMovement(QListView::Static);
     m_list->setWordWrap(true);
     m_list->setUniformItemSizes(true);
-    m_list->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_list->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_list->setDragEnabled(true);
     m_list->setDragDropMode(QAbstractItemView::DragOnly);
     m_list->setContextMenuPolicy(Qt::CustomContextMenu);
-    // External drops are imported (eventFilter); the view itself never takes drops.
+    auto *renameKey = new QShortcut(QKeySequence(Qt::Key_F2), m_list, nullptr, nullptr, Qt::WidgetShortcut);
+    connect(renameKey, &QShortcut::activated, this, [this]
+            {
+        const QModelIndex index = m_list->currentIndex();
+        if (index.isValid())
+            renameEntry(m_files->filePath(m_proxy->mapToSource(index))); });
+    m_list->installEventFilter(this);
+    // External drops are imported and grid items dropped on folders are moved (eventFilter); the view itself never takes drops.
     m_list->setAcceptDrops(true);
     m_list->viewport()->setAcceptDrops(true);
     m_list->viewport()->installEventFilter(this);
@@ -443,6 +452,11 @@ void AssetBrowser::reveal(const QString &path)
 void AssetBrowser::fillNewMenu(QMenu *menu)
 {
     const QString folder = targetFolder();
+    const QString parent = m_folder;
+    QAction *newFolder = menu->addAction(tr("Folder"), this, [this, parent]
+                                         { createFolder(parent); });
+    newFolder->setEnabled(!parent.isEmpty() && QFileInfo(parent).isDir());
+    menu->addSeparator();
     for (const AssetTemplate &tmpl : assetTemplates())
         menu->addAction(tmpl.label, this, [this, tmpl, folder]
                         { createFromTemplate(tmpl, folder); });
@@ -450,8 +464,49 @@ void AssetBrowser::fillNewMenu(QMenu *menu)
 
 bool AssetBrowser::eventFilter(QObject *watched, QEvent *event)
 {
+    // Delete in the grid deletes files; taking the shortcut override keeps the map's Delete action from firing.
+    if (watched == m_list && (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress))
+    {
+        auto *key = static_cast<QKeyEvent *>(event);
+        if (key->matches(QKeySequence::Delete) && key->modifiers() == Qt::NoModifier)
+        {
+            key->accept();
+            if (event->type() == QEvent::KeyPress)
+                deleteEntries(selectedPaths());
+            return true;
+        }
+    }
+    if (watched == m_tree->viewport())
+        return handleTreeDrop(event) || QWidget::eventFilter(watched, event);
     if (watched != m_list->viewport())
         return QWidget::eventFilter(watched, event);
+
+    if (event->type() == QEvent::DragEnter || event->type() == QEvent::DragMove || event->type() == QEvent::Drop)
+    {
+        auto *e = static_cast<QDropEvent *>(event);
+        const QStringList entries = draggedEntries(e);
+        if (!entries.isEmpty())
+        {
+            const QModelIndex index = m_list->indexAt(e->position().toPoint());
+            const QString folder = index.isValid() ? m_files->filePath(m_proxy->mapToSource(index)) : QString();
+            const bool movable = canMoveInto(entries, folder);
+            // Enter is always accepted, otherwise no move events follow while the cursor looks for a folder.
+            if (event->type() == QEvent::DragEnter || movable)
+            {
+                e->setDropAction(Qt::CopyAction);
+                e->accept();
+            }
+            else
+            {
+                e->ignore();
+            }
+            // Moving inside the drop would change the model while the drag is still running.
+            if (event->type() == QEvent::Drop && movable)
+                QTimer::singleShot(0, this, [this, entries, folder]
+                                   { moveEntries(entries, folder); });
+            return true;
+        }
+    }
 
     const auto importable = [this](const QDropEvent *e)
     {
@@ -531,6 +586,21 @@ void AssetBrowser::showContextMenu(const QPoint &pos)
         return;
     }
     const QString file = m_files->filePath(m_proxy->mapToSource(index));
+    if (!m_list->selectionModel()->isSelected(index))
+        m_list->setCurrentIndex(index);
+    const QStringList selection = selectedPaths();
+    const QStringList targets = selection.contains(file) ? selection : QStringList{file};
+    const auto addFileActions = [this, &menu, file, targets]
+    {
+        QAction *rename = menu.addAction(tr("Rename"), this, [this, file]
+                                         { renameEntry(file); });
+        rename->setShortcut(QKeySequence(Qt::Key_F2));
+        menu.addAction(targets.size() > 1 ? tr("Move %1 Items To...").arg(targets.size()) : tr("Move To..."), this, [this, targets]
+                       { chooseMoveTarget(targets); });
+        QAction *remove = menu.addAction(targets.size() > 1 ? tr("Delete %1 Items").arg(targets.size()) : tr("Delete"), this, [this, targets]
+                                         { deleteEntries(targets); });
+        remove->setShortcut(QKeySequence::Delete);
+    };
     if (QFileInfo(file).isDir())
     {
         QAction *open = menu.addAction(tr("Open"), this, [this, file]
@@ -538,6 +608,9 @@ void AssetBrowser::showContextMenu(const QPoint &pos)
         QFont bold = open->font();
         bold.setBold(true);
         open->setFont(bold);
+        menu.addSeparator();
+        addFileActions();
+        menu.addSeparator();
         menu.addAction(tr("Show in Explorer"), this, [file]
                        { QDesktopServices::openUrl(QUrl::fromLocalFile(file)); });
         menu.exec(m_list->viewport()->mapToGlobal(pos));
@@ -565,9 +638,322 @@ void AssetBrowser::showContextMenu(const QPoint &pos)
             applyToSelection(material); });
         menu.addSeparator();
     }
+    addFileActions();
+    menu.addSeparator();
     menu.addAction(tr("Show in Folder"), this, [file]
                    { QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(file).absolutePath())); });
     menu.exec(m_list->viewport()->mapToGlobal(pos));
+}
+
+QStringList AssetBrowser::selectedPaths() const
+{
+    QStringList paths;
+    for (const QModelIndex &index : m_list->selectionModel()->selectedIndexes())
+        if (index.column() == 0)
+            paths << m_files->filePath(m_proxy->mapToSource(index));
+    return paths;
+}
+
+QStringList AssetBrowser::draggedEntries(const QDropEvent *e) const
+{
+    QStringList paths;
+    if (e->source() != m_list || !e->mimeData()->hasUrls())
+        return paths;
+    for (const QUrl &url : e->mimeData()->urls())
+        if (url.isLocalFile())
+            paths << url.toLocalFile();
+    return paths;
+}
+
+bool AssetBrowser::canMoveInto(const QStringList &entries, const QString &folder) const
+{
+    if (folder.isEmpty() || !QFileInfo(folder).isDir())
+        return false;
+    const QString target = QDir::cleanPath(QFileInfo(folder).absoluteFilePath());
+    bool any = false;
+    for (const QString &entry : entries)
+    {
+        const QFileInfo info(entry);
+        const QString path = QDir::cleanPath(info.absoluteFilePath());
+        if (info.isDir() && (target.compare(path, Qt::CaseInsensitive) == 0 || target.startsWith(path + '/', Qt::CaseInsensitive)))
+            return false;
+        if (QDir::cleanPath(info.absolutePath()).compare(target, Qt::CaseInsensitive) != 0)
+            any = true;
+    }
+    return any;
+}
+
+bool AssetBrowser::handleTreeDrop(QEvent *event)
+{
+    // Hovering a drag highlights the folder under the cursor; afterwards the tree goes back to the grid's folder.
+    const auto restoreCurrent = [this]
+    { m_tree->setCurrentIndex(m_dirProxy->mapFromSource(m_dirs->index(m_folder))); };
+    if (event->type() == QEvent::DragLeave)
+    {
+        restoreCurrent();
+        return true;
+    }
+    if (event->type() != QEvent::DragEnter && event->type() != QEvent::DragMove && event->type() != QEvent::Drop)
+        return false;
+
+    auto *e = static_cast<QDropEvent *>(event);
+    const QModelIndex index = m_tree->indexAt(e->position().toPoint());
+    const QString folder = index.isValid() ? m_dirs->filePath(m_dirProxy->mapToSource(index)) : QString();
+    const QStringList entries = draggedEntries(e);
+    QStringList imports;
+    if (entries.isEmpty() && e->source() != m_list && e->mimeData()->hasUrls())
+        for (const QUrl &url : e->mimeData()->urls())
+            if (url.isLocalFile() && AssetImporter::canImport(url.toLocalFile()))
+                imports << url.toLocalFile();
+
+    const bool move = canMoveInto(entries, folder);
+    const bool import = !imports.isEmpty() && !folder.isEmpty();
+    if (move || import || (event->type() == QEvent::DragEnter && (!entries.isEmpty() || !imports.isEmpty())))
+    {
+        e->setDropAction(Qt::CopyAction);
+        e->accept();
+    }
+    else
+    {
+        e->ignore();
+        return true;
+    }
+    if (event->type() == QEvent::DragMove && index.isValid())
+        m_tree->setCurrentIndex(index);
+    if (event->type() == QEvent::Drop)
+    {
+        if (move)
+            QTimer::singleShot(0, this, [this, entries, folder]
+                               { moveEntries(entries, folder); });
+        else if (import)
+            m_importer->import(imports, QDir(folder) == QDir(m_ctx->projectDir()) ? QString() : folder);
+        restoreCurrent();
+    }
+    return true;
+}
+
+void AssetBrowser::renameEntry(const QString &path)
+{
+    const QFileInfo info(path);
+    if (!info.exists())
+        return;
+    bool ok = false;
+    QString name = QInputDialog::getText(this, info.isDir() ? tr("Rename Folder") : tr("Rename File"), tr("New name:"),
+                                         QLineEdit::Normal, info.fileName(), &ok);
+    if (!ok || name == info.fileName())
+        return;
+    if (info.isFile() && !info.suffix().isEmpty() && QFileInfo(name).suffix().isEmpty())
+        name += '.' + info.suffix();
+    const QString problem = AssetFileOps::checkName(name);
+    if (!problem.isEmpty())
+    {
+        QMessageBox::warning(this, tr("Rename"), problem);
+        return;
+    }
+    const QString newSuffix = QFileInfo(name).suffix();
+    if (info.isFile() && newSuffix.compare(info.suffix(), Qt::CaseInsensitive) != 0 &&
+        QMessageBox::question(this, tr("Rename"), tr("Change the extension from .%1 to .%2? The file may stop opening or loading.").arg(info.suffix(), newSuffix)) != QMessageBox::Yes)
+        return;
+    relocate({{path, info.dir().filePath(name)}});
+}
+
+void AssetBrowser::createFolder(const QString &parent)
+{
+    const QDir dir(parent);
+    QString suggestion = tr("New Folder");
+    for (int i = 2; dir.exists(suggestion); ++i)
+        suggestion = tr("New Folder %1").arg(i);
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, tr("New Folder"), tr("Name:"), QLineEdit::Normal, suggestion, &ok);
+    if (!ok)
+        return;
+    const QString problem = AssetFileOps::checkName(name);
+    if (!problem.isEmpty())
+    {
+        QMessageBox::warning(this, tr("New Folder"), problem);
+        return;
+    }
+    if (dir.exists(name))
+    {
+        QMessageBox::warning(this, tr("New Folder"), tr("%1 already exists.").arg(name));
+        return;
+    }
+    if (!dir.mkdir(name))
+    {
+        QMessageBox::warning(this, tr("New Folder"), tr("Could not create %1.").arg(QDir::toNativeSeparators(dir.filePath(name))));
+        return;
+    }
+    m_ctx->log(tr("Created folder %1").arg(QDir::toNativeSeparators(QDir(m_ctx->projectDir()).relativeFilePath(dir.filePath(name)))));
+    reveal(dir.filePath(name));
+}
+
+void AssetBrowser::chooseMoveTarget(const QStringList &paths)
+{
+    const QString content = m_ctx->projectDir();
+    const QString folder = QFileDialog::getExistingDirectory(this, tr("Move To"), m_folder.isEmpty() ? content : m_folder);
+    if (folder.isEmpty())
+        return;
+    const auto inside = [&folder](const QString &root)
+    {
+        if (root.isEmpty())
+            return false;
+        const QString relative = QDir(root).relativeFilePath(folder);
+        return !relative.startsWith("..") && !QDir::isAbsolutePath(relative);
+    };
+    if (!inside(content) && !inside(m_ctx->project().configDir))
+    {
+        QMessageBox::warning(this, tr("Move To"), tr("Pick a folder inside the project's content or config folder."));
+        return;
+    }
+    if (!canMoveInto(paths, folder))
+    {
+        QMessageBox::information(this, tr("Move To"), tr("Nothing to move: the selection is already in that folder, or a folder would be moved into itself."));
+        return;
+    }
+    moveEntries(paths, folder);
+}
+
+void AssetBrowser::moveEntries(const QStringList &paths, const QString &folder)
+{
+    QList<QPair<QString, QString>> moves;
+    const QDir target(folder);
+    for (const QString &path : paths)
+    {
+        const QFileInfo info(path);
+        if (info.exists() && info.absoluteDir() != target)
+            moves.append({path, target.filePath(info.fileName())});
+    }
+    relocate(moves);
+}
+
+void AssetBrowser::relocate(const QList<QPair<QString, QString>> &moves)
+{
+    if (moves.isEmpty())
+        return;
+    const QDir content(m_ctx->projectDir());
+    const auto shown = [&content](const QString &path)
+    { return QDir::toNativeSeparators(content.relativeFilePath(path)); };
+
+    QHash<QString, QString> moved;
+    QStringList warnings;
+    QStringList errors;
+    QString renamed;
+    bool folderMoved = false;
+    for (const auto &[from, to] : moves)
+    {
+        const QString fromClean = QDir::cleanPath(QFileInfo(from).absoluteFilePath());
+        const bool sameFolder = QFileInfo(from).absoluteDir() == QFileInfo(to).absoluteDir();
+        QString error;
+        if (!AssetFileOps::relocate(from, to, &moved, &error, &warnings))
+        {
+            errors << error;
+            continue;
+        }
+        m_ctx->log(sameFolder ? tr("Renamed %1 to %2").arg(shown(from), QFileInfo(to).fileName())
+                              : tr("Moved %1 to %2").arg(shown(from), shown(to)));
+        if (sameFolder)
+            renamed = to;
+        const QString current = QDir::cleanPath(m_folder);
+        if (current.compare(fromClean, Qt::CaseInsensitive) == 0 || current.startsWith(fromClean + '/', Qt::CaseInsensitive))
+        {
+            m_folder = QDir::cleanPath(to) + current.mid(fromClean.size());
+            folderMoved = true;
+        }
+    }
+    for (const QString &warning : warnings)
+        m_ctx->log(warning, LogLevel::Warning);
+
+    if (!moved.isEmpty())
+    {
+        AssetFileOps::updateReferences(m_ctx, moved);
+        m_ctx->materials()->reload();
+        if (folderMoved)
+        {
+            m_tree->setCurrentIndex(m_dirProxy->mapFromSource(m_dirs->index(m_folder)));
+            showFolder(m_folder);
+        }
+        else if (moves.size() == 1 && !renamed.isEmpty())
+        {
+            reveal(renamed);
+        }
+    }
+    if (!errors.isEmpty())
+        QMessageBox::warning(this, moves.size() == 1 ? tr("Rename / Move") : tr("Move"), errors.join('\n'));
+}
+
+void AssetBrowser::deleteEntries(const QStringList &paths)
+{
+    if (paths.isEmpty())
+        return;
+    const QDir content(m_ctx->projectDir());
+    const auto shown = [&content](const QString &path)
+    { return QDir::toNativeSeparators(content.relativeFilePath(path)); };
+
+    QString question = paths.size() == 1
+                           ? tr("Move %1 to the Recycle Bin?").arg(shown(paths.first()))
+                           : tr("Move these %1 items to the Recycle Bin?").arg(paths.size());
+    const QString docPath = m_ctx->doc()->filePath();
+    bool deletesOpenMap = false;
+    for (const QString &path : paths)
+    {
+        const QString clean = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+        const QString doc = docPath.isEmpty() ? QString() : QDir::cleanPath(QFileInfo(docPath).absoluteFilePath());
+        if (!doc.isEmpty() && (doc.compare(clean, Qt::CaseInsensitive) == 0 || doc.startsWith(clean + '/', Qt::CaseInsensitive)))
+            deletesOpenMap = true;
+    }
+    if (deletesOpenMap)
+        question += "\n\n" + tr("This includes the open map. It stays open; saving writes it back.");
+    const QStringList references = AssetFileOps::findReferences(m_ctx, paths);
+    if (!references.isEmpty())
+    {
+        constexpr int kShown = 10;
+        QStringList listed = references.mid(0, kShown);
+        for (QString &r : listed)
+            r = "  " + QDir::toNativeSeparators(r);
+        if (references.size() > kShown)
+            listed << tr("  ...and %1 more").arg(references.size() - kShown);
+        question += "\n\n" + tr("Still used by:") + '\n' + listed.join('\n');
+    }
+    if (QMessageBox::question(this, tr("Delete"), question, QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        return;
+
+    QStringList removed;
+    QStringList warnings;
+    QStringList errors;
+    bool folderGone = false;
+    for (const QString &path : paths)
+    {
+        const QString clean = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
+        QString error;
+        if (!AssetFileOps::remove(path, &removed, &error, &warnings))
+        {
+            errors << error;
+            continue;
+        }
+        m_ctx->log(tr("Deleted %1").arg(shown(path)));
+        const QString current = QDir::cleanPath(m_folder);
+        if (current.compare(clean, Qt::CaseInsensitive) == 0 || current.startsWith(clean + '/', Qt::CaseInsensitive))
+        {
+            m_folder = QFileInfo(clean).absolutePath();
+            folderGone = true;
+        }
+    }
+    for (const QString &warning : warnings)
+        m_ctx->log(warning, LogLevel::Warning);
+    for (const QString &reference : references)
+        m_ctx->log(tr("%1 still references a deleted file").arg(QDir::toNativeSeparators(reference)), LogLevel::Warning);
+
+    if (!removed.isEmpty())
+    {
+        m_ctx->materials()->reload();
+        if (folderGone)
+        {
+            m_tree->setCurrentIndex(m_dirProxy->mapFromSource(m_dirs->index(m_folder)));
+            showFolder(m_folder);
+        }
+    }
+    if (!errors.isEmpty())
+        QMessageBox::warning(this, tr("Delete"), errors.join('\n'));
 }
 
 void AssetBrowser::updateCurrent()

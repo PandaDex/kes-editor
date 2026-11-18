@@ -31,6 +31,9 @@ private:
     {
         QString input;
         QString output;
+        QStringList flags;
+        bool writesFile = true;
+        bool writesClips = false;
     };
     void startNext();
     void finishJob(int exitCode, bool crashed);
