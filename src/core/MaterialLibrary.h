@@ -18,6 +18,23 @@ struct MaterialInfo
     QImage texture;
     bool transparent = false;
 
+    // Engine material values (material_file.cpp), used by the Unlit and Lit views.
+    float baseColor[4] = {1.f, 1.f, 1.f, 1.f};
+    float emissive[3] = {0.f, 0.f, 0.f};
+    float emissiveIntensity = 1.f;
+    float metallic = 0.f;
+    float roughness = 0.8f;
+    float normalScale = 1.f;
+    float occlusionStrength = 1.f;
+    float alphaCutoff = 0.f;
+    bool lit = true;
+    bool doubleSided = false;
+    bool castShadows = true;
+    QImage normalTexture;
+    QImage metallicRoughnessTexture;
+    QImage occlusionTexture;
+    QImage emissiveTexture;
+
     // Pixel size used for texture coordinates. Untextured materials use a nominal
     // 64x64 so UVs stay meaningful if a texture is added later.
     QSize textureSize() const { return texture.isNull() ? QSize(64, 64) : texture.size(); }
@@ -48,6 +65,7 @@ signals:
 
 private:
     MaterialInfo parse(const QString &relativePath) const;
+    QImage loadMaterialTexture(const QString &path) const;
 
     QString m_root;
     QString m_scanDir;

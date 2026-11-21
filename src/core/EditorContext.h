@@ -17,6 +17,15 @@ enum class LogLevel
     Error = 2
 };
 
+// How the 3D view draws materials. Shaded: editing look with a fixed key light.
+// Unlit: albedo + emissive. Lit: the engine's lights, sky, shadows and tonemap.
+enum class ShadingMode
+{
+    Shaded = 0,
+    Unlit = 1,
+    Lit = 2
+};
+
 class EditorContext : public QObject
 {
     Q_OBJECT
@@ -31,6 +40,9 @@ public:
 
     const QString &currentMaterial() const { return m_currentMaterial; }
     void setCurrentMaterial(const QString &path);
+
+    ShadingMode shadingMode() const { return m_shading; }
+    void setShadingMode(ShadingMode mode);
 
     int gridSize() const { return m_grid; }
     bool snapEnabled() const { return m_snap; }
@@ -63,6 +75,7 @@ public:
 
 signals:
     void gridChanged();
+    void shadingModeChanged();
     void snapChanged();
     void entityClassChanged();
     void projectDirChanged();
@@ -82,6 +95,7 @@ private:
     QString m_currentMaterial;
     QList<Viewport *> m_viewports;
     Viewport *m_active = nullptr;
+    ShadingMode m_shading = ShadingMode::Shaded;
     int m_grid = 16;
     bool m_snap = true;
     QString m_entityClass;

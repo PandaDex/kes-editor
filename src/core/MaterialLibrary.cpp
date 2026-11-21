@@ -42,6 +42,18 @@ namespace
         return QColor::fromRgbF(channel(0, 1.f), channel(1, 1.f), channel(2, 1.f), channel(3, 1.f));
     }
 
+    void parseFloats(const QString &value, float *out, int count)
+    {
+        const QStringList parts = unquote(value).split(QRegularExpression("[,\\s]+"), Qt::SkipEmptyParts);
+        for (int i = 0; i < count && i < parts.size(); ++i)
+        {
+            bool ok = false;
+            const float f = parts[i].toFloat(&ok);
+            if (ok)
+                out[i] = f;
+        }
+    }
+
     // Engine text block files: Type { Key = Value ... }
     struct Block
     {
@@ -211,6 +223,35 @@ MaterialInfo MaterialLibrary::parse(const QString &relativePath) const
                 info.texturePath = unquote(block.values["Texture"]);
             if (block.values.contains("Transparent"))
                 info.transparent = parseBool(block.values["Transparent"], false);
+
+            const auto &v = block.values;
+            if (v.contains("BaseColor"))
+                parseFloats(v["BaseColor"], info.baseColor, 4);
+            if (v.contains("Emissive"))
+                parseFloats(v["Emissive"], info.emissive, 3);
+            auto readFloat = [&](const char *key, float &out)
+            {
+                if (v.contains(key))
+                    parseFloats(v[key], &out, 1);
+            };
+            readFloat("EmissiveIntensity", info.emissiveIntensity);
+            readFloat("Metallic", info.metallic);
+            readFloat("Roughness", info.roughness);
+            readFloat("NormalScale", info.normalScale);
+            readFloat("OcclusionStrength", info.occlusionStrength);
+            readFloat("AlphaCutoff", info.alphaCutoff);
+            info.metallic = std::clamp(info.metallic, 0.f, 1.f);
+            info.roughness = std::clamp(info.roughness, 0.02f, 1.f);
+            if (v.contains("Lit"))
+                info.lit = parseBool(v["Lit"], true);
+            if (v.contains("DoubleSided"))
+                info.doubleSided = parseBool(v["DoubleSided"], false);
+            if (v.contains("CastShadows"))
+                info.castShadows = parseBool(v["CastShadows"], true);
+            info.normalTexture = loadMaterialTexture(unquote(v.value("NormalTexture")));
+            info.metallicRoughnessTexture = loadMaterialTexture(unquote(v.value("MetallicRoughnessTexture")));
+            info.occlusionTexture = loadMaterialTexture(unquote(v.value("OcclusionTexture")));
+            info.emissiveTexture = loadMaterialTexture(unquote(v.value("EmissiveTexture")));
         }
         else if (block.type == "Node" && unquote(block.values.value("Type")) == "Texture")
         {
@@ -220,17 +261,21 @@ MaterialInfo MaterialLibrary::parse(const QString &relativePath) const
     if (info.texturePath.isEmpty())
         info.texturePath = graphTexture;
 
-    if (!info.texturePath.isEmpty())
-    {
-        QString file = QDir(m_root).filePath(info.texturePath);
-        if (!QFileInfo::exists(file) && !m_texturesDir.isEmpty())
-        {
-            // Texture paths written relative to the textures folder ("brick.bmp").
-            const QString fallback = QDir(m_texturesDir).filePath(info.texturePath);
-            const QString byName = QDir(m_texturesDir).filePath(QFileInfo(info.texturePath).fileName());
-            file = QFileInfo::exists(fallback) ? fallback : byName;
-        }
-        info.texture = loadTexture(file);
-    }
+    info.texture = loadMaterialTexture(info.texturePath);
     return info;
+}
+
+QImage MaterialLibrary::loadMaterialTexture(const QString &path) const
+{
+    if (path.isEmpty())
+        return {};
+    QString file = QDir(m_root).filePath(path);
+    if (!QFileInfo::exists(file) && !m_texturesDir.isEmpty())
+    {
+        // Texture paths written relative to the textures folder ("brick.bmp").
+        const QString fallback = QDir(m_texturesDir).filePath(path);
+        const QString byName = QDir(m_texturesDir).filePath(QFileInfo(path).fileName());
+        file = QFileInfo::exists(fallback) ? fallback : byName;
+    }
+    return loadTexture(file);
 }

@@ -237,6 +237,23 @@ void MainWindow::createActions()
     connect(m_maxAct, &QAction::triggered, this, &MainWindow::toggleMaximize);
     connect(m_perspectiveAct, &QAction::toggled, this, &MainWindow::togglePerspectiveView);
 
+    m_shadingGroup = new QActionGroup(this);
+    const QString shadingNames[3] = { tr("&Shaded"), tr("&Unlit"), tr("&Lit") };
+    const QString shadingTips[3] = { tr("Editing view: textures with a fixed key light"),
+                                     tr("Base colour and emissive only, no lighting"),
+                                     tr("The game's lights, sky, shadows and tonemap") };
+    for (int i = 0; i < 3; ++i)
+    {
+        QAction* a = mk(shadingNames[i], QKeySequence(QString("Alt+%1").arg(i + 1)));
+        a->setCheckable(true);
+        a->setToolTip(shadingTips[i]);
+        a->setData(i);
+        a->setChecked(int(m_ctx->shadingMode()) == i);
+        m_shadingGroup->addAction(a);
+        connect(a, &QAction::triggered, this, [this, i]
+            { m_ctx->setShadingMode(ShadingMode(i)); });
+    }
+
     m_buildAct = mk(tr("&Build Map..."), QKeySequence(Qt::Key_F9));
     m_newClassAct = mk(tr("&New Entity Class..."));
     m_reloadDefsAct = mk(tr("&Reload Entity Definitions"), QKeySequence("Ctrl+Shift+R"));
@@ -314,6 +331,8 @@ void MainWindow::createMenus()
     view->addActions({ m_snapAct, m_gridUpAct, m_gridDownAct });
     view->addSeparator();
     view->addActions({ m_maxAct, m_perspectiveAct });
+    view->addSeparator();
+    view->addMenu(tr("3D S&hading"))->addActions(m_shadingGroup->actions());
     view->addSeparator();
     QMenu* panels = view->addMenu(tr("&Panels"));
     for (QDockWidget* d : findChildren<QDockWidget*>())
@@ -396,12 +415,25 @@ void MainWindow::createToolbars()
     top->addAction(m_snapAct);
     top->addSeparator();
     top->addAction(m_perspectiveAct);
+    top->addWidget(new QLabel(tr(" Shading ")));
+    m_shadingBox = new QComboBox;
+    m_shadingBox->addItems({ tr("Shaded"), tr("Unlit"), tr("Lit") });
+    m_shadingBox->setToolTip(tr("How the 3D view draws materials (Alt+1/2/3)"));
+    m_shadingBox->setCurrentIndex(int(m_ctx->shadingMode()));
+    top->addWidget(m_shadingBox);
     top->addSeparator();
     top->addActions({ m_carveAct, m_hollowAct, m_tieAct });
     top->addSeparator();
     top->addActions({ m_checkAct, m_buildAct });
     addToolBar(Qt::TopToolBarArea, top);
 
+    connect(m_shadingBox, qOverload<int>(&QComboBox::activated), this, [this](int i)
+        { m_ctx->setShadingMode(ShadingMode(i)); });
+    connect(m_ctx, &EditorContext::shadingModeChanged, this, [this]
+        {
+        const int mode = int(m_ctx->shadingMode());
+        m_shadingBox->setCurrentIndex(mode);
+        m_shadingGroup->actions()[mode]->setChecked(true); });
     connect(m_gridBox, qOverload<int>(&QComboBox::activated), this, [this](int i)
         { m_ctx->setGridSize(m_gridBox->itemData(i).toInt()); });
     connect(m_ctx, &EditorContext::gridChanged, this, [this]

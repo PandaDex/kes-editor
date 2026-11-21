@@ -2,6 +2,7 @@
 #include "core/MapObject.h"
 #include "render/Batch.h"
 #include "render/Camera.h"
+#include "render/MaterialRenderer.h"
 #include <QElapsedTimer>
 #include <QHash>
 #include <QImage>
@@ -70,35 +71,19 @@ private:
     // Material-coloured / textured faces (3D view only). Returns false when the face has no
     // known material and should be drawn the old way.
     bool addMaterialFace(const BrushFace &f);
-    QOpenGLTexture *materialTexture(const QString &material);
-    void releaseMaterialTextures();
     QString assetPath(const QString &path) const;
     const ModelAsset *entityModel(const MapObject &o) const;
     AABB objectBounds(const MapObject &o) const;
-    void addModel(const MapObject &o, const ModelAsset &model, Batch &b);
+    void addModel(const MapObject &o, const ModelAsset &model);
     const QImage *spriteImage(const QString &path);
     QString entityAsset(const MapObject &o, bool sprite) const;
 
     EditorContext *m_ctx;
     Camera m_cam;
 
-    struct TexVertex
-    {
-        float x, y, z, u, v, r, g, b, a;
-    };
-    struct MaterialRange
-    {
-        QString material;
-        int first = 0;
-        int count = 0;
-    };
-
     QOpenGLShaderProgram m_prog;
-    QOpenGLShaderProgram m_texProg;
-    QOpenGLBuffer m_texVbo{QOpenGLBuffer::VertexBuffer};
-    QHash<QString, QVector<TexVertex>> m_pendingMaterialTris;
-    QVector<MaterialRange> m_materialRanges;
-    QHash<QString, std::shared_ptr<QOpenGLTexture>> m_materialTextures;
+    MaterialRenderer m_materials;
+    QHash<QString, QVector<MeshVertex>> m_pendingMaterialTris;
     QOpenGLVertexArrayObject m_vao;
     QOpenGLBuffer m_vbo{QOpenGLBuffer::VertexBuffer};
     QOpenGLBuffer m_sceneVbo{QOpenGLBuffer::VertexBuffer};

@@ -50,11 +50,13 @@ Viewport::Viewport(EditorContext *ctx, ViewKind kind, QWidget *parent) : QOpenGL
         if (context())
         {
             makeCurrent();
-            releaseMaterialTextures();
+            m_materials.releaseTextures();
             doneCurrent();
         }
         m_sceneDirty = true;
         update(); });
+    connect(ctx, &EditorContext::shadingModeChanged, this, [this]
+            { if (!isOrtho()) update(); });
     connect(ctx->models(), &ModelCache::changed, this, [this]
             { m_sceneDirty = true; update(); });
     connect(ctx, &EditorContext::focusRequested, this, [this](const AABB &b)
@@ -70,13 +72,11 @@ Viewport::~Viewport()
     if (context())
     {
         makeCurrent();
-        releaseMaterialTextures();
+        m_materials.release();
         m_vbo.destroy();
         m_sceneVbo.destroy();
-        m_texVbo.destroy();
         m_vao.destroy();
         m_prog.removeAllShaders();
-        m_texProg.removeAllShaders();
         doneCurrent();
     }
 }
@@ -114,28 +114,13 @@ void Viewport::initializeGL()
     if (!m_prog.link())
         m_ctx->log("Viewport shader link failed: " + m_prog.log(), LogLevel::Error);
 
-    m_texProg.addShaderFromSourceCode(QOpenGLShader::Vertex,
-                                      "#version 330 core\n"
-                                      "layout(location=0) in vec3 aPos;\n"
-                                      "layout(location=1) in vec2 aUv;\n"
-                                      "layout(location=2) in vec4 aCol;\n"
-                                      "uniform mat4 uMvp;\n"
-                                      "out vec2 vUv; out vec4 vCol;\n"
-                                      "void main(){ vUv = aUv; vCol = aCol; gl_Position = uMvp * vec4(aPos, 1.0); }\n");
-    m_texProg.addShaderFromSourceCode(QOpenGLShader::Fragment,
-                                      "#version 330 core\n"
-                                      "in vec2 vUv; in vec4 vCol;\n"
-                                      "uniform sampler2D uTex;\n"
-                                      "uniform bool uUseTex;\n"
-                                      "out vec4 oCol;\n"
-                                      "void main(){ oCol = uUseTex ? texture(uTex, vUv) * vCol : vCol; }\n");
-    if (!m_texProg.link())
-        m_ctx->log("Viewport material shader link failed: " + m_texProg.log(), LogLevel::Error);
+    QString materialLog;
+    if (!m_materials.initialize(&materialLog))
+        m_ctx->log("Viewport material shaders failed: " + materialLog, LogLevel::Error);
 
     m_vao.create();
     m_vbo.create();
     m_sceneVbo.create();
-    m_texVbo.create();
 }
 
 void Viewport::drawVerts(const QVector<Vertex> &v, GLenum mode)
@@ -169,18 +154,15 @@ void Viewport::rebuildSceneCache()
     m_pendingMaterialTris.clear();
     drawScene(scene);
 
-    QVector<TexVertex> texVertices;
-    m_materialRanges.clear();
+    QVector<MeshVertex> meshVertices;
+    QVector<MaterialRenderer::Range> ranges;
     for (auto it = m_pendingMaterialTris.cbegin(); it != m_pendingMaterialTris.cend(); ++it)
     {
-        m_materialRanges.push_back({it.key(), int(texVertices.size()), int(it.value().size())});
-        texVertices += it.value();
+        ranges.push_back({it.key(), int(meshVertices.size()), int(it.value().size())});
+        meshVertices += it.value();
     }
     m_pendingMaterialTris.clear();
-    m_texVbo.bind();
-    if (!texVertices.isEmpty())
-        m_texVbo.allocate(texVertices.constData(), int(texVertices.size() * sizeof(TexVertex)));
-    m_texVbo.release();
+    m_materials.setGeometry(meshVertices, ranges);
 
     QVector<Vertex> vertices;
     const qsizetype total = scene.tris.size() + scene.lines.size() +
@@ -227,15 +209,13 @@ bool Viewport::addMaterialFace(const BrushFace &f)
     if (!info)
         return false;
 
-    const float shade = Batch::faceShade(f.normal());
-    const QColor c = info->color;
-    const float r = float(c.redF()) * shade, g = float(c.greenF()) * shade, b = float(c.blueF()) * shade;
+    const QVector3D n = f.normal();
     const QSize size = info->textureSize();
-    QVector<TexVertex> &out = m_pendingMaterialTris[f.material];
+    QVector<MeshVertex> &out = m_pendingMaterialTris[f.material];
     auto vertex = [&](const QVector3D &p)
     {
         const QVector2D uv = f.textureCoord(p, float(size.width()), float(size.height()));
-        out.push_back({p.x(), p.y(), p.z(), uv.x(), uv.y(), r, g, b, 1.f});
+        out.push_back({p.x(), p.y(), p.z(), n.x(), n.y(), n.z(), uv.x(), uv.y(), 1.f, 1.f, 1.f, 1.f});
     };
     for (int i = 1; i + 1 < f.points.size(); ++i)
     {
@@ -244,31 +224,6 @@ bool Viewport::addMaterialFace(const BrushFace &f)
         vertex(f.points[i + 1]);
     }
     return true;
-}
-
-QOpenGLTexture *Viewport::materialTexture(const QString &material)
-{
-    auto found = m_materialTextures.constFind(material);
-    if (found != m_materialTextures.cend())
-        return found.value().get();
-
-    std::shared_ptr<QOpenGLTexture> texture;
-    const MaterialInfo *info = m_ctx->materials()->find(material);
-    if (info && !info->texture.isNull())
-    {
-        texture = std::make_shared<QOpenGLTexture>(info->texture, QOpenGLTexture::GenerateMipMaps);
-        // Nearest filtering keeps the PSX look the engine renders with.
-        texture->setMinificationFilter(QOpenGLTexture::NearestMipMapNearest);
-        texture->setMagnificationFilter(QOpenGLTexture::Nearest);
-        texture->setWrapMode(QOpenGLTexture::Repeat);
-    }
-    m_materialTextures.insert(material, texture);   // null = untextured, cached too
-    return texture.get();
-}
-
-void Viewport::releaseMaterialTextures()
-{
-    m_materialTextures.clear();
 }
 
 QString Viewport::assetPath(const QString &path) const
@@ -308,33 +263,36 @@ AABB Viewport::objectBounds(const MapObject &o) const
     return o.worldBounds();
 }
 
-// The engine draws a kmodel with the entity's Material only (default white when unset or missing).
-void Viewport::addModel(const MapObject &o, const ModelAsset &model, Batch &b)
+// Same as the engine: entity Material, then the model's default, then white. Children ignore the entity Material.
+void Viewport::addModel(const MapObject &o, const ModelAsset &model)
 {
     const QMatrix4x4 placement = ModelCache::placement(o);
     const QMatrix4x4 normalPlacement = placement.inverted().transposed();
-    const QString material = objectValue(o, "Material").trimmed();
-    const MaterialInfo *info = material.isEmpty() ? nullptr : m_ctx->materials()->find(material);
-    QVector<TexVertex> *textured = info ? &m_pendingMaterialTris[material] : nullptr;
-    const QColor base = info ? info->color : QColor(255, 255, 255);
-    auto vertex = [&](const ModelVertex &v)
+    const auto knownMaterial = [&](const QString &material)
+    { return !material.isEmpty() && m_ctx->materials()->find(material) ? material : QString(); };
+    const auto addTriangles = [&](const QVector<ModelVertex> &vertices, const QVector<quint32> &indices, const QString &material)
     {
-        const QVector3D p = placement.map(v.position);
-        const float shade = Batch::faceShade(normalPlacement.mapVector(v.normal).normalized());
-        const float r = float(base.redF()) * v.r * shade, g = float(base.greenF()) * v.g * shade,
-                    bl = float(base.blueF()) * v.b * shade;
-        if (textured)
-            textured->push_back({p.x(), p.y(), p.z(), v.u, v.v, r, g, bl, v.a});
-        else
-            b.tris.push_back({p.x(), p.y(), p.z(), r, g, bl, v.a});
+        QVector<MeshVertex> &out = m_pendingMaterialTris[material];
+        auto vertex = [&](const ModelVertex &v)
+        {
+            const QVector3D p = placement.map(v.position);
+            const QVector3D n = normalPlacement.mapVector(v.normal).normalized();
+            out.push_back({p.x(), p.y(), p.z(), n.x(), n.y(), n.z(), v.u, v.v, v.r, v.g, v.b, v.a});
+        };
+        // engine -> editor swaps two axes, so flip the winding to keep faces front-facing
+        for (int i = 0; i + 2 < indices.size(); i += 3)
+        {
+            vertex(vertices[int(indices[i])]);
+            vertex(vertices[int(indices[i + 2])]);
+            vertex(vertices[int(indices[i + 1])]);
+        }
     };
-    // engine -> editor swaps two axes, so flip the winding to keep faces front-facing
-    for (int i = 0; i + 2 < model.indices.size(); i += 3)
-    {
-        vertex(model.vertices[int(model.indices[i])]);
-        vertex(model.vertices[int(model.indices[i + 2])]);
-        vertex(model.vertices[int(model.indices[i + 1])]);
-    }
+
+    const QString entityMaterial = objectValue(o, "Material").trimmed();
+    addTriangles(model.vertices, model.indices,
+                 knownMaterial(entityMaterial.isEmpty() ? model.defaultMaterial : entityMaterial));
+    for (const ModelChildPart &child : model.children)
+        addTriangles(child.vertices, child.indices, knownMaterial(child.material));
 }
 
 const QImage *Viewport::spriteImage(const QString &path)
@@ -372,15 +330,18 @@ void Viewport::paintGL()
     m_cam.size = size();
     m_cam.update();
     const bool ortho = isOrtho();
+    const ShadingMode shading = ortho ? ShadingMode::Shaded : m_ctx->shadingMode();
+    if (m_sceneDirty)
+        rebuildSceneCache();
+    if (shading == ShadingMode::Lit)
+        m_materials.prepareLit(*m_ctx->doc(), m_cam, m_ctx->materials(), defaultFramebufferObject(),
+                               size() * devicePixelRatioF());
 
     if (ortho)
         glClearColor(0.105f, 0.105f, 0.115f, 1.f);
     else
         glClearColor(0.19f, 0.21f, 0.25f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    if (m_sceneDirty)
-        rebuildSceneCache();
 
     Batch b;
     if (ortho)
@@ -392,9 +353,11 @@ void Viewport::paintGL()
         t->draw(this, b);
 
     {
+        QOpenGLVertexArrayObject::Binder vao(&m_vao);
+        if (shading == ShadingMode::Lit)
+            m_materials.drawSky(m_cam);
         m_prog.bind();
         m_prog.setUniformValue("uMvp", m_cam.viewProj);
-        QOpenGLVertexArrayObject::Binder vao(&m_vao);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         if (ortho)
@@ -408,33 +371,10 @@ void Viewport::paintGL()
             glPolygonOffset(1.f, 1.f);
         }
         drawCachedVerts(0, m_sceneTriCount, GL_TRIANGLES);
-        if (!ortho && !m_materialRanges.isEmpty())
+        if (!ortho)
         {
             m_prog.release();
-            m_texProg.bind();
-            m_texProg.setUniformValue("uMvp", m_cam.viewProj);
-            m_texProg.setUniformValue("uTex", 0);
-            m_texVbo.bind();
-            m_texProg.enableAttributeArray(0);
-            m_texProg.setAttributeBuffer(0, GL_FLOAT, 0, 3, sizeof(TexVertex));
-            m_texProg.enableAttributeArray(1);
-            m_texProg.setAttributeBuffer(1, GL_FLOAT, 3 * sizeof(float), 2, sizeof(TexVertex));
-            m_texProg.enableAttributeArray(2);
-            m_texProg.setAttributeBuffer(2, GL_FLOAT, 5 * sizeof(float), 4, sizeof(TexVertex));
-            glActiveTexture(GL_TEXTURE0);
-            for (const MaterialRange &range : m_materialRanges)
-            {
-                QOpenGLTexture *texture = materialTexture(range.material);
-                m_texProg.setUniformValue("uUseTex", texture != nullptr);
-                if (texture)
-                    texture->bind(0);
-                glDrawArrays(GL_TRIANGLES, range.first, range.count);
-                if (texture)
-                    texture->release(0);
-            }
-            m_texProg.disableAttributeArray(2);
-            m_texVbo.release();
-            m_texProg.release();
+            m_materials.draw(shading, m_cam, m_ctx->materials());
             m_prog.bind();
         }
         drawVerts(b.tris, GL_TRIANGLES);
@@ -554,7 +494,7 @@ void Viewport::drawScene(Batch &b)
         }
         else if (model && !ortho)
         {
-            addModel(o, *model, b);
+            addModel(o, *model);
         }
         if (isPoint && !hasSprite && !model)
         {
@@ -622,7 +562,13 @@ void Viewport::paintOverlay()
         return r;
     };
     const bool active = m_ctx->activeViewport() == this;
-    pill(QPointF(6, 6), title(), active ? QColor(255, 214, 170) : QColor(225, 225, 230), active);
+    QString heading = title();
+    if (!isOrtho())
+    {
+        const ShadingMode mode = m_ctx->shadingMode();
+        heading += mode == ShadingMode::Lit ? tr(" - Lit") : mode == ShadingMode::Unlit ? tr(" - Unlit") : tr(" - Shaded");
+    }
+    pill(QPointF(6, 6), heading, active ? QColor(255, 214, 170) : QColor(225, 225, 230), active);
 
     if (isOrtho())
     {

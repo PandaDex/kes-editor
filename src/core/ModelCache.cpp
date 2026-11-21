@@ -1,11 +1,14 @@
 #include "core/ModelCache.h"
 #include "core/MapObject.h"
 
+#include "animation_pose.h"
 #include "engine_configuration.h"
 #include "kmodel.h"
 
 #include <QDir>
 #include <QFileInfo>
+#include <algorithm>
+#include <functional>
 
 namespace
 {
@@ -29,6 +32,112 @@ QVector3D parseScale(const QString &text)
     }
     return s;
 }
+
+QDateTime fileTime(const QString &path)
+{
+    const QFileInfo info(path);
+    return info.exists() ? info.lastModified() : QDateTime();
+}
+
+ModelVertex toVertex(const MeshVertex &v)
+{
+    ModelVertex out;
+    out.position = QVector3D(v.px, v.py, v.pz);
+    out.normal = QVector3D(v.nx, v.ny, v.nz);
+    out.u = v.u;
+    out.v = v.v;
+    out.r = v.r;
+    out.g = v.g;
+    out.b = v.b;
+    out.a = v.a;
+    return out;
+}
+
+QVector3D mapPoint(const float *m, const QVector3D &p)
+{
+    return {p.x() * m[0] + p.y() * m[4] + p.z() * m[8] + m[12], p.x() * m[1] + p.y() * m[5] + p.z() * m[9] + m[13],
+            p.x() * m[2] + p.y() * m[6] + p.z() * m[10] + m[14]};
+}
+
+QVector3D mapDirection(const float *m, const QVector3D &d)
+{
+    return QVector3D(d.x() * m[0] + d.y() * m[4] + d.z() * m[8], d.x() * m[1] + d.y() * m[5] + d.z() * m[9],
+                     d.x() * m[2] + d.y() * m[6] + d.z() * m[10])
+        .normalized();
+}
+}
+
+QString ModelCache::resolve(const QString &path) const
+{
+    const QString trimmed = path.trimmed();
+    return QDir::cleanPath(QFileInfo(QDir::isAbsolutePath(trimmed) ? trimmed : QDir(m_root).absoluteFilePath(trimmed)).absoluteFilePath());
+}
+
+namespace
+{
+// same depth limit as SkinnedModelEntity::CreateChildParts
+constexpr int kMaxChildDepth = 4;
+
+struct ChildBaker
+{
+    std::function<QString(const QString &)> resolve;
+    QVector<QPair<QString, QDateTime>> dependencies;
+    QStringList errors;
+
+    void bake(const KModelData &parent, const std::vector<float> &parentWorld, const float *parentMatrix, int depth,
+              ModelAsset &out)
+    {
+        if (depth >= kMaxChildDepth)
+            return;
+        for (const KModelChild &child : parent.children)
+        {
+            const QString path = QString::fromStdString(child.modelPath);
+            if (path.trimmed().isEmpty())
+                continue;
+            const QString file = resolve(path);
+            dependencies.push_back({file, fileTime(file)});
+
+            KModelData data;
+            MeshData mesh;
+            std::string error;
+            if (!LoadKModelFile(file.toUtf8().constData(), data, &error) || !BuildMeshDataFromKModel(data, mesh, &error))
+            {
+                errors << QStringLiteral("%1: %2").arg(path, QString::fromStdString(error));
+                continue;
+            }
+
+            float local[16], matrix[16];
+            BuildKModelChildMatrix(parent, parentWorld, child, local);
+            if (parentMatrix)
+                MultiplyMatrices(local, parentMatrix, matrix);
+            else
+                std::copy(local, local + 16, matrix);
+
+            ModelChildPart part;
+            part.material = QString::fromStdString(child.materialPath.empty() ? data.defaultMaterial : child.materialPath);
+            part.vertices.reserve(int(mesh.vertices.size()));
+            for (const MeshVertex &v : mesh.vertices)
+            {
+                ModelVertex vertex = toVertex(v);
+                vertex.position = mapPoint(matrix, vertex.position);
+                vertex.normal = mapDirection(matrix, vertex.normal);
+                out.bounds.expand(vertex.position);
+                part.vertices.push_back(vertex);
+            }
+            for (uint32_t index : mesh.indices)
+            {
+                if (index < mesh.vertices.size())
+                    part.indices.push_back(index);
+            }
+            part.indices.resize(part.indices.size() - part.indices.size() % 3);
+            out.children.push_back(std::move(part));
+
+            std::vector<float> world;
+            BuildBindPoseWorldMatrices(data, world);
+            bake(data, world, matrix, depth + 1, out);
+        }
+    }
+};
 }
 
 QString objectValue(const MapObject &o, const QString &key, const QString &fallback)
@@ -60,12 +169,14 @@ const ModelAsset *ModelCache::find(const QString &path)
     const QString trimmed = path.trimmed();
     if (trimmed.isEmpty())
         return nullptr;
-    const QFileInfo info(QDir::isAbsolutePath(trimmed) ? trimmed : QDir(m_root).absoluteFilePath(trimmed));
-    const QString resolved = QDir::cleanPath(info.absoluteFilePath());
-    const QDateTime modified = info.exists() ? info.lastModified() : QDateTime();
+    const QString resolved = resolve(trimmed);
+    const QFileInfo info(resolved);
+    const QDateTime modified = fileTime(resolved);
 
     auto found = m_entries.find(resolved);
-    if (found != m_entries.end() && found->modified == modified)
+    if (found != m_entries.end() && found->modified == modified &&
+        std::all_of(found->dependencies.cbegin(), found->dependencies.cend(),
+                    [](const QPair<QString, QDateTime> &d) { return fileTime(d.first) == d.second; }))
         return found->asset.get();
 
     Entry entry;
@@ -91,18 +202,11 @@ const ModelAsset *ModelCache::find(const QString &path)
         else
         {
             auto asset = std::make_shared<ModelAsset>();
+            asset->defaultMaterial = QString::fromStdString(data.defaultMaterial);
             asset->vertices.reserve(int(mesh.vertices.size()));
             for (const MeshVertex &v : mesh.vertices)
             {
-                ModelVertex out;
-                out.position = QVector3D(v.px, v.py, v.pz);
-                out.normal = QVector3D(v.nx, v.ny, v.nz);
-                out.u = v.u;
-                out.v = v.v;
-                out.r = v.r;
-                out.g = v.g;
-                out.b = v.b;
-                out.a = v.a;
+                const ModelVertex out = toVertex(v);
                 asset->bounds.expand(out.position);
                 asset->vertices.push_back(out);
             }
@@ -113,6 +217,15 @@ const ModelAsset *ModelCache::find(const QString &path)
                     asset->indices.push_back(index);
             }
             asset->indices.resize(asset->indices.size() - asset->indices.size() % 3);
+
+            ChildBaker baker;
+            baker.resolve = [this](const QString &p) { return resolve(p); };
+            std::vector<float> world;
+            BuildBindPoseWorldMatrices(data, world);
+            baker.bake(data, world, nullptr, 0, *asset);
+            for (const QString &e : baker.errors)
+                emit message(tr("Model %1: child model %2").arg(trimmed, e), kWarning);
+            entry.dependencies = std::move(baker.dependencies);
             entry.asset = std::move(asset);
         }
     }

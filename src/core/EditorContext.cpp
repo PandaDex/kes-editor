@@ -7,6 +7,7 @@
 #include <QGuiApplication>
 #include <QDir>
 #include <QStandardPaths>
+#include <algorithm>
 
 EditorContext::EditorContext(QObject *parent) : QObject(parent)
 {
@@ -15,6 +16,7 @@ EditorContext::EditorContext(QObject *parent) : QObject(parent)
     m_tools = new ToolManager(this);
     m_materials = new MaterialLibrary(this);
     m_models = new ModelCache(this);
+    m_shading = ShadingMode(std::clamp(QSettings().value("shadingMode", 0).toInt(), 0, 2));
     connect(m_models, &ModelCache::message, this, &EditorContext::logMessage);
     if (auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
         connect(app, &QGuiApplication::applicationStateChanged, m_models, [this](Qt::ApplicationState state)
@@ -80,6 +82,15 @@ EditorContext::EditorContext(QObject *parent) : QObject(parent)
     }
     m_materials->setRoot(m_projectDir);
     m_models->setRoot(m_projectDir);
+}
+
+void EditorContext::setShadingMode(ShadingMode mode)
+{
+    if (mode == m_shading)
+        return;
+    m_shading = mode;
+    QSettings().setValue("shadingMode", int(mode));
+    emit shadingModeChanged();
 }
 
 bool EditorContext::loadProject(const QString &kprojectPath, QString *error, bool remember)

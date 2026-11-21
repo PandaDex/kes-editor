@@ -81,6 +81,8 @@ private:
     QAction *m_flipHAct, *m_flipVAct, *m_checkAct;
     QMenu* m_recentMenu = nullptr;
     QComboBox* m_gridBox = nullptr;
+    QComboBox* m_shadingBox = nullptr;
+    QActionGroup* m_shadingGroup = nullptr;
     QStackedWidget* m_optionsStack = nullptr;
     QMap<QString, int> m_optionsIndex;
     QLabel *m_stCursor = nullptr, *m_stSel = nullptr, *m_stGrid = nullptr;

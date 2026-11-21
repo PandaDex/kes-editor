@@ -12,7 +12,8 @@ set(KES_ENGINE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../engine" CACHE PATH "KES en
 if(NOT EXISTS "${KES_ENGINE_DIR}/kmodel.h")
     message(FATAL_ERROR "KES engine sources not found at ${KES_ENGINE_DIR}; set KES_ENGINE_DIR")
 endif()
-add_library(forge_engine STATIC ${KES_ENGINE_DIR}/kmodel.cpp engine/EngineFileIo.cpp)
+add_library(forge_engine STATIC ${KES_ENGINE_DIR}/kmodel.cpp ${KES_ENGINE_DIR}/animation_pose.cpp
+    ${KES_ENGINE_DIR}/animation_clip.cpp engine/EngineFileIo.cpp)
 target_include_directories(forge_engine PUBLIC ${KES_ENGINE_DIR})
 target_compile_definitions(forge_engine PUBLIC KES_PROFILING=0 _CRT_SECURE_NO_WARNINGS NOMINMAX)
 set_target_properties(forge_engine PROPERTIES CXX_STANDARD 20)

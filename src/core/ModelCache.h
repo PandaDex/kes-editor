@@ -18,12 +18,22 @@ struct ModelVertex
     float r = 1.f, g = 1.f, b = 1.f, a = 1.f;
 };
 
+// Child model baked into the parent's model space, with the parent in bind pose.
+struct ModelChildPart
+{
+    QVector<ModelVertex> vertices;
+    QVector<quint32> indices;
+    QString material; // empty = white
+};
+
 // A .kmodel flattened the same way the engine draws it: every mesh, node transforms baked, bind pose.
 struct ModelAsset
 {
     QVector<ModelVertex> vertices;
     QVector<quint32> indices;
-    AABB bounds; // engine model space
+    QString defaultMaterial;
+    QVector<ModelChildPart> children;
+    AABB bounds;                      // includes children
 };
 
 // .kmodel assets shared by every viewport. Paths are content-relative like the map's "Model" values.
@@ -54,7 +64,9 @@ private:
     {
         std::shared_ptr<ModelAsset> asset; // null = failed
         QDateTime modified;
+        QVector<QPair<QString, QDateTime>> dependencies; // child model files
     };
+    QString resolve(const QString &path) const;
     QString m_root;
     QHash<QString, Entry> m_entries;
 };
