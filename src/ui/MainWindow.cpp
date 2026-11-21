@@ -48,6 +48,7 @@ MainWindow::MainWindow()
 {
     m_ctx = new EditorContext(this);
     m_importer = new AssetImporter(m_ctx, this);
+    connect(m_importer, &AssetImporter::imported, m_ctx->models(), &ModelCache::refresh);
     setObjectName("MainWindow");
     resize(1500, 920);
     setDockNestingEnabled(true);

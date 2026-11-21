@@ -17,6 +17,7 @@
 #include <QTimer>
 
 class EditorContext;
+struct ModelAsset;
 
 class QMimeData;
 
@@ -72,7 +73,9 @@ private:
     QOpenGLTexture *materialTexture(const QString &material);
     void releaseMaterialTextures();
     QString assetPath(const QString &path) const;
-    const QVector<QVector3D> *modelTriangles(const QString &path);
+    const ModelAsset *entityModel(const MapObject &o) const;
+    AABB objectBounds(const MapObject &o) const;
+    void addModel(const MapObject &o, const ModelAsset &model, Batch &b);
     const QImage *spriteImage(const QString &path);
     QString entityAsset(const MapObject &o, bool sprite) const;
 
@@ -110,8 +113,6 @@ private:
     bool m_look = false, m_pan = false, m_space = false;
     float m_moveSpeed = 500.f;
     QSet<int> m_keys;
-    QHash<QString, QVector<QVector3D>> m_modelCache;
-    QSet<QString> m_failedModels;
     QHash<QString, QImage> m_spriteCache;
     QSet<QString> m_failedSprites;
     QTimer m_flyTimer;

@@ -1,5 +1,6 @@
 #include "render/Viewport.h"
 #include "core/EditorContext.h"
+#include "core/ModelCache.h"
 #include "tools/MaterialTool.h"
 #include "ui/AssetDrag.h"
 #include <QDragEnterEvent>
@@ -54,6 +55,8 @@ Viewport::Viewport(EditorContext *ctx, ViewKind kind, QWidget *parent) : QOpenGL
         }
         m_sceneDirty = true;
         update(); });
+    connect(ctx->models(), &ModelCache::changed, this, [this]
+            { m_sceneDirty = true; update(); });
     connect(ctx, &EditorContext::focusRequested, this, [this](const AABB &b)
             { m_cam.focus(b); update(); });
 
@@ -279,8 +282,7 @@ QString Viewport::assetPath(const QString &path) const
 
 QString Viewport::entityAsset(const MapObject &o, bool sprite) const
 {
-    const QString key = sprite ? QStringLiteral("sprite") : QStringLiteral("model");
-    const QString objectPath = o.kv.value(key).trimmed();
+    const QString objectPath = objectValue(o, sprite ? QStringLiteral("sprite") : QStringLiteral("model")).trimmed();
     if (!objectPath.isEmpty())
         return objectPath;
     if (const ClassDef *def = m_ctx->registry()->resolved(o.classname))
@@ -288,78 +290,51 @@ QString Viewport::entityAsset(const MapObject &o, bool sprite) const
     return {};
 }
 
-const QVector<QVector3D> *Viewport::modelTriangles(const QString &path)
+const ModelAsset *Viewport::entityModel(const MapObject &o) const
 {
-    const QString resolved = assetPath(path);
-    if (resolved.isEmpty())
+    if (o.solid)
         return nullptr;
-    auto found = m_modelCache.constFind(resolved);
-    if (found != m_modelCache.cend())
-        return &found.value();
-    if (m_failedModels.contains(resolved))
-        return nullptr;
+    return m_ctx->models()->find(entityAsset(o, false));
+}
 
-    const QFileInfo info(resolved);
-    if (info.suffix().compare("obj", Qt::CaseInsensitive) != 0)
+AABB Viewport::objectBounds(const MapObject &o) const
+{
+    if (const ModelAsset *model = entityModel(o))
     {
-        m_failedModels.insert(resolved);
-        m_ctx->log(tr("Unsupported model format (OBJ only): %1").arg(resolved), LogLevel::Warning);
-        return nullptr;
+        const AABB bounds = ModelCache::worldBounds(*model, ModelCache::placement(o));
+        if (bounds.valid())
+            return bounds;
     }
-    QFile file(resolved);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-    {
-        m_failedModels.insert(resolved);
-        m_ctx->log(tr("Could not open model asset %1: %2").arg(resolved, file.errorString()), LogLevel::Warning);
-        return nullptr;
-    }
+    return o.worldBounds();
+}
 
-    QVector<QVector3D> positions;
-    QVector<QVector3D> triangles;
-    QTextStream stream(&file);
-    while (!stream.atEnd())
+// The engine draws a kmodel with the entity's Material only (default white when unset or missing).
+void Viewport::addModel(const MapObject &o, const ModelAsset &model, Batch &b)
+{
+    const QMatrix4x4 placement = ModelCache::placement(o);
+    const QMatrix4x4 normalPlacement = placement.inverted().transposed();
+    const QString material = objectValue(o, "Material").trimmed();
+    const MaterialInfo *info = material.isEmpty() ? nullptr : m_ctx->materials()->find(material);
+    QVector<TexVertex> *textured = info ? &m_pendingMaterialTris[material] : nullptr;
+    const QColor base = info ? info->color : QColor(255, 255, 255);
+    auto vertex = [&](const ModelVertex &v)
     {
-        const QString line = stream.readLine().section('#', 0, 0).simplified();
-        if (line.startsWith("v "))
-        {
-            const QStringList fields = line.mid(2).split(' ');
-            if (fields.size() < 3)
-                continue;
-            bool xOk = false, yOk = false, zOk = false;
-            const float x = fields[0].toFloat(&xOk);
-            const float y = fields[1].toFloat(&yOk);
-            const float z = fields[2].toFloat(&zOk);
-            if (xOk && yOk && zOk)
-                positions.push_back({x, y, z});
-        }
-        else if (line.startsWith("f "))
-        {
-            QVector<int> face;
-            const QStringList fields = line.mid(2).split(' ');
-            for (const QString &field : fields)
-            {
-                bool ok = false;
-                const int raw = field.section('/', 0, 0).toInt(&ok);
-                const int index = raw < 0 ? positions.size() + raw : raw - 1;
-                if (!ok || index < 0 || index >= positions.size())
-                {
-                    face.clear();
-                    break;
-                }
-                face.push_back(index);
-            }
-            for (int i = 1; i + 1 < face.size(); ++i)
-                triangles << positions[face[0]] << positions[face[i]] << positions[face[i + 1]];
-        }
-    }
-    if (triangles.isEmpty())
+        const QVector3D p = placement.map(v.position);
+        const float shade = Batch::faceShade(normalPlacement.mapVector(v.normal).normalized());
+        const float r = float(base.redF()) * v.r * shade, g = float(base.greenF()) * v.g * shade,
+                    bl = float(base.blueF()) * v.b * shade;
+        if (textured)
+            textured->push_back({p.x(), p.y(), p.z(), v.u, v.v, r, g, bl, v.a});
+        else
+            b.tris.push_back({p.x(), p.y(), p.z(), r, g, bl, v.a});
+    };
+    // engine -> editor swaps two axes, so flip the winding to keep faces front-facing
+    for (int i = 0; i + 2 < model.indices.size(); i += 3)
     {
-        m_failedModels.insert(resolved);
-        m_ctx->log(tr("Model asset contains no supported faces: %1").arg(resolved), LogLevel::Warning);
-        return nullptr;
+        vertex(model.vertices[int(model.indices[i])]);
+        vertex(model.vertices[int(model.indices[i + 2])]);
+        vertex(model.vertices[int(model.indices[i + 1])]);
     }
-    m_modelCache.insert(resolved, std::move(triangles));
-    return &m_modelCache[resolved];
 }
 
 const QImage *Viewport::spriteImage(const QString &path)
@@ -540,10 +515,10 @@ void Viewport::drawScene(Batch &b)
         if (!doc->isVisible(o))
             continue;
         const QColor col = objectColor(o);
-        const AABB bb = o.worldBounds();
         const bool isPoint = !o.solid;
         const bool hasSprite = isPoint && spriteImage(entityAsset(o, true));
-        const QVector<QVector3D> *model = isPoint && !ortho && !hasSprite ? modelTriangles(entityAsset(o, false)) : nullptr;
+        const ModelAsset *model = isPoint && !hasSprite ? entityModel(o) : nullptr;
+        const AABB bb = objectBounds(o);
 
         if (o.solid)
         {
@@ -568,6 +543,7 @@ void Viewport::drawScene(Batch &b)
         }
         if (!hasSprite && (!model || ortho))
         {
+            // 2D views show a model as its bounds
             if (ortho)
                 b.wireBox(bb, col);
             else
@@ -578,16 +554,7 @@ void Viewport::drawScene(Batch &b)
         }
         else if (model && !ortho)
         {
-            QMatrix4x4 transform;
-            transform.translate(o.origin);
-            transform.rotate(o.angles.y(), 0.f, 0.f, 1.f);
-            transform.rotate(o.angles.x(), 0.f, 1.f, 0.f);
-            transform.rotate(o.angles.z(), 1.f, 0.f, 0.f);
-            bool scaleOk = false;
-            const float scale = o.kv.value("scale", "1").toFloat(&scaleOk);
-            transform.scale(scaleOk ? scale : 1.f);
-            for (int i = 0; i + 2 < model->size(); i += 3)
-                b.tri(transform * (*model)[i], transform * (*model)[i + 1], transform * (*model)[i + 2], col);
+            addModel(o, *model, b);
         }
         if (isPoint && !hasSprite && !model)
         {
@@ -608,7 +575,7 @@ void Viewport::drawSelection(Batch &b)
         const MapObject *o = doc->find(id);
         if (!o || !doc->isVisible(*o))
             continue;
-        const AABB bb = o->worldBounds();
+        const AABB bb = objectBounds(*o);
         if (o->solid)
         {
             for (const Brush &br : o->worldBrushes())
@@ -728,9 +695,10 @@ ObjectId Viewport::pickObject(const QPointF &pt) const
         const MapObject &o = kvp.second;
         if (!m_ctx->doc()->isVisible(o))
             continue;
-        const AABB bb = o.worldBounds();
+        const ModelAsset *model = entityModel(o);
+        const AABB bb = model ? objectBounds(o) : o.worldBounds();
         float t = 0.f;
-        if (!o.intersectRay(r, &t))
+        if (model ? !bb.intersect(r, &t) : !o.intersectRay(r, &t))
             continue;
         // 2D: prefer the smallest footprint so small objects inside big ones stay clickable.
         const float score = isOrtho() ? bb.size()[h] * bb.size()[v] : t;

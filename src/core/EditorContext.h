@@ -1,6 +1,7 @@
 #pragma once
 #include "core/MapDocument.h"
 #include "core/MaterialLibrary.h"
+#include "core/ModelCache.h"
 #include "core/ProjectFile.h"
 #include "entities/EntityDefs.h"
 #include "tools/Tool.h"
@@ -26,6 +27,7 @@ public:
     EntityRegistry *registry() const { return m_registry; }
     ToolManager *tools() const { return m_tools; }
     MaterialLibrary *materials() const { return m_materials; }
+    ModelCache *models() const { return m_models; }
 
     const QString &currentMaterial() const { return m_currentMaterial; }
     void setCurrentMaterial(const QString &path);
@@ -76,6 +78,7 @@ private:
     EntityRegistry *m_registry;
     ToolManager *m_tools;
     MaterialLibrary *m_materials;
+    ModelCache *m_models;
     QString m_currentMaterial;
     QList<Viewport *> m_viewports;
     Viewport *m_active = nullptr;

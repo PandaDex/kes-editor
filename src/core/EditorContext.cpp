@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QSettings>
 #include <QCoreApplication>
+#include <QGuiApplication>
 #include <QDir>
 #include <QStandardPaths>
 
@@ -13,6 +14,14 @@ EditorContext::EditorContext(QObject *parent) : QObject(parent)
     m_registry = new EntityRegistry(this);
     m_tools = new ToolManager(this);
     m_materials = new MaterialLibrary(this);
+    m_models = new ModelCache(this);
+    connect(m_models, &ModelCache::message, this, &EditorContext::logMessage);
+    if (auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance()))
+        connect(app, &QGuiApplication::applicationStateChanged, m_models, [this](Qt::ApplicationState state)
+                {
+                    if (state == Qt::ApplicationActive)
+                        m_models->refresh();
+                });
 
     m_tools->add(new SelectTool(this));
     m_tools->add(new EntityTool(this));
@@ -70,6 +79,7 @@ EditorContext::EditorContext(QObject *parent) : QObject(parent)
         }
     }
     m_materials->setRoot(m_projectDir);
+    m_models->setRoot(m_projectDir);
 }
 
 bool EditorContext::loadProject(const QString &kprojectPath, QString *error, bool remember)
@@ -80,6 +90,7 @@ bool EditorContext::loadProject(const QString &kprojectPath, QString *error, boo
     m_project = project;
     m_projectDir = project.assetRoot;
     m_materials->setRoot(project.assetRoot, project.materialsDir, project.texturesDir);
+    m_models->setRoot(project.assetRoot);
     if (remember)
         QSettings().setValue("project", project.filePath);
     emit projectDirChanged();
@@ -142,6 +153,7 @@ void EditorContext::setProjectDir(const QString &d)
     QSettings().setValue("contentDir", d);
     QSettings().remove("project");
     m_materials->setRoot(d);
+    m_models->setRoot(d);
     emit projectDirChanged();
     emit projectChanged();
 }
