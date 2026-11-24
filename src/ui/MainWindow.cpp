@@ -9,6 +9,7 @@
 #include "ui/AssetBrowser.h"
 #include "ui/EntityClassDialog.h"
 #include "ui/OutlinerPanel.h"
+#include "ui/ProjectSettingsDialog.h"
 #include "ui/PropertiesPanel.h"
 #include "ui/KesStyle.h"
 #include "ui/Theme.h"
@@ -262,6 +263,13 @@ void MainWindow::createActions()
     m_openProjectAct = mk(tr("Open &Project..."), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_O));
     connect(m_openProjectAct, &QAction::triggered, this, [this]
         { openProject(); });
+    m_projectSettingsAct = mk(tr("Project &Settings..."));
+    m_projectSettingsAct->setToolTip(tr("Edit the name, version, company and startup map in the .kproject"));
+    m_projectSettingsAct->setEnabled(m_ctx->project().isValid());
+    connect(m_projectSettingsAct, &QAction::triggered, this, [this]
+        { if (m_ctx->project().isValid()) ProjectSettingsDialog(m_ctx, this).exec(); });
+    connect(m_ctx, &EditorContext::projectChanged, this, [this]
+        { m_projectSettingsAct->setEnabled(m_ctx->project().isValid()); });
     m_aboutAct = mk(tr("&About Forge"));
     connect(m_buildAct, &QAction::triggered, this, &MainWindow::buildMap);
     connect(m_newClassAct, &QAction::triggered, this, [this]
@@ -322,6 +330,8 @@ void MainWindow::createMenus()
     edit->addActions({ m_selAllAct, m_selNoneAct, m_selClassAct, m_centerAct });
     edit->addSeparator();
     edit->addActions({ m_hideSelAct, m_hideUnselAct, m_unhideAct });
+    edit->addSeparator();
+    edit->addAction(m_projectSettingsAct);
     connect(edit, &QMenu::aboutToShow, this, [this]
         { m_pasteAct->setEnabled(MapOps::canPaste()); });
     connect(edit, &QMenu::aboutToHide, this, [this]

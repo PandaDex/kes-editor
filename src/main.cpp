@@ -48,6 +48,8 @@ int main(int argc, char** argv)
     fmt.setDepthBufferSize(24);
     fmt.setSamples(4);
     QSurfaceFormat::setDefaultFormat(fmt);
+    // Qt's native Windows file dialogs keep the main thread blocked for seconds after closing.
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
 
     QApplication app(argc, argv);
     QApplication::setApplicationName("Forge");

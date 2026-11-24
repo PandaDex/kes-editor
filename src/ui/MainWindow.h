@@ -75,6 +75,7 @@ private:
     QAction *m_snapAct, *m_gridUpAct, *m_gridDownAct, *m_maxAct, *m_perspectiveAct;
     QAction *m_buildAct, *m_newClassAct, *m_reloadDefsAct, *m_contentAct, *m_aboutAct;
     QAction *m_openProjectAct = nullptr;
+    QAction *m_projectSettingsAct = nullptr;
     QAction *m_cutAct, *m_copyAct, *m_pasteAct, *m_selClassAct;
     QAction *m_hideSelAct, *m_hideUnselAct, *m_unhideAct;
     QAction *m_carveAct, *m_hollowAct, *m_tieAct, *m_toWorldAct, *m_transformAct, *m_snapSelAct;

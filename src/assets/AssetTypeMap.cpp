@@ -20,7 +20,7 @@ const QMap<QString, QString> kAssetEditors = {
     { "mat", "kesShaderGraph" },
     { "slangnodes", "kesShaderGraph" },
     { "kmodel", "kesModelEditor" },
-    { "kanimgraph", "kesModelEditor" },
+    { "ag", "kesModelEditor" },
     { "imap", "kesInputEditor" },
     { "po", "kesLocalizationEditor {project}" },
 

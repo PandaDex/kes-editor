@@ -3,6 +3,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QRegularExpression>
+#include <QSaveFile>
 #include <QTextStream>
 
 namespace
@@ -68,8 +70,11 @@ bool KesProject::load(const QString &path, KesProject &out, QString *error)
     const QDir projectDir = info.absoluteDir();
     out.filePath = info.absoluteFilePath();
     out.name = values.value("Name", info.completeBaseName());
+    out.company = values.value("Company");
+    out.version = values.value("Version");
     out.startupMap = values.value("StartupMap");
-    out.assetRoot = QDir::cleanPath(projectDir.absoluteFilePath(values.value("AssetRoot", "content")));
+    out.assetRootValue = values.value("AssetRoot", "content");
+    out.assetRoot = QDir::cleanPath(projectDir.absoluteFilePath(out.assetRootValue));
 
     const QDir root(out.assetRoot);
     out.mapsDir = QDir::cleanPath(root.absoluteFilePath("maps"));
@@ -82,6 +87,87 @@ bool KesProject::load(const QString &path, KesProject &out, QString *error)
         if (error)
             *error = QObject::tr("AssetRoot '%1' of %2 does not exist.").arg(out.assetRoot, path);
         out = {};
+        return false;
+    }
+    return true;
+}
+
+bool KesProject::writeValues(const QString &path, const QList<QPair<QString, QString>> &values, QString *error)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+    {
+        if (error)
+            *error = QObject::tr("Cannot open %1: %2").arg(path, file.errorString());
+        return false;
+    }
+    const QString text = QString::fromUtf8(file.readAll());
+    file.close();
+
+    const QString eol = text.contains("\r\n") ? "\r\n" : "\n";
+    QStringList lines = text.split(eol);
+
+    // Same block detection as parseProjectBlock: header line, then the line ending in '{'.
+    int open = -1, close = -1;
+    bool sawHeader = false;
+    for (int i = 0; i < lines.size(); ++i)
+    {
+        QString line = lines[i];
+        const int comment = line.indexOf("//");
+        if (comment >= 0)
+            line = line.left(comment);
+        line = line.trimmed();
+        if (open < 0)
+        {
+            if (line == "Project" || line == "Project{" || line.startsWith("Project "))
+                sawHeader = true;
+            if (sawHeader && line.endsWith('{'))
+                open = i;
+        }
+        else if (line == "}")
+        {
+            close = i;
+            break;
+        }
+    }
+    if (open < 0 || close < 0)
+    {
+        if (error)
+            *error = QObject::tr("%1 has no Project { ... } block.").arg(path);
+        return false;
+    }
+
+    QString indent = "    ";
+    for (const auto &[key, value] : values)
+    {
+        const QRegularExpression keyLine("^(\\s*)" + QRegularExpression::escape(key) + "\\s*=");
+        int found = -1;
+        for (int i = open + 1; i < close; ++i)
+        {
+            const QRegularExpressionMatch m = keyLine.match(lines[i]);
+            if (m.hasMatch())
+            {
+                found = i;
+                indent = m.captured(1);
+                break;
+            }
+        }
+        if (found >= 0 && value.isEmpty())
+        {
+            lines.removeAt(found);
+            --close;
+        }
+        else if (found >= 0)
+            lines[found] = indent + key + "=\"" + value + "\"";
+        else if (!value.isEmpty())
+            lines.insert(close++, indent + key + "=\"" + value + "\"");
+    }
+
+    QSaveFile out(path);
+    if (!out.open(QIODevice::WriteOnly) || out.write(lines.join(eol).toUtf8()) < 0 || !out.commit())
+    {
+        if (error)
+            *error = QObject::tr("Cannot write %1: %2").arg(path, out.errorString());
         return false;
     }
     return true;
