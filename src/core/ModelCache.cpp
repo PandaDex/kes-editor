@@ -65,6 +65,31 @@ QVector3D mapDirection(const float *m, const QVector3D &d)
                      d.x() * m[2] + d.y() * m[6] + d.z() * m[10])
         .normalized();
 }
+
+// Copies the mesh's in-range whole triangles, keeping each section's range valid in the copy.
+void copySections(const MeshData &mesh, QVector<quint32> &indices, QVector<ModelSection> &sections)
+{
+    std::vector<MeshSection> source = mesh.sections;
+    if (source.empty())
+        source.push_back({0, uint32_t(mesh.indices.size()), -1});
+    for (const MeshSection &s : source)
+    {
+        ModelSection out;
+        out.firstIndex = int(indices.size());
+        out.slot = s.materialSlot;
+        const size_t end = std::min<size_t>(size_t(s.firstIndex) + s.indexCount, mesh.indices.size());
+        for (size_t i = s.firstIndex; i + 2 < end; i += 3)
+        {
+            const uint32_t a = mesh.indices[i], b = mesh.indices[i + 1], c = mesh.indices[i + 2];
+            if (a >= mesh.vertices.size() || b >= mesh.vertices.size() || c >= mesh.vertices.size())
+                continue;
+            indices << a << b << c;
+        }
+        out.indexCount = int(indices.size()) - out.firstIndex;
+        if (out.indexCount > 0)
+            sections.push_back(out);
+    }
+}
 }
 
 QString ModelCache::resolve(const QString &path) const
@@ -113,8 +138,9 @@ struct ChildBaker
             else
                 std::copy(local, local + 16, matrix);
 
+            // Same as the engine: slot material, then the child's Material, then the child model's default.
             ModelChildPart part;
-            part.material = QString::fromStdString(child.materialPath.empty() ? data.defaultMaterial : child.materialPath);
+            const QString fallback = QString::fromStdString(child.materialPath.empty() ? data.defaultMaterial : child.materialPath);
             part.vertices.reserve(int(mesh.vertices.size()));
             for (const MeshVertex &v : mesh.vertices)
             {
@@ -124,12 +150,13 @@ struct ChildBaker
                 out.bounds.expand(vertex.position);
                 part.vertices.push_back(vertex);
             }
-            for (uint32_t index : mesh.indices)
+            copySections(mesh, part.indices, part.sections);
+            for (ModelSection &section : part.sections)
             {
-                if (index < mesh.vertices.size())
-                    part.indices.push_back(index);
+                const bool hasSlot = section.slot >= 0 && size_t(section.slot) < data.materials.size() &&
+                                     !data.materials[size_t(section.slot)].materialPath.empty();
+                section.material = hasSlot ? QString::fromStdString(data.materials[size_t(section.slot)].materialPath) : fallback;
             }
-            part.indices.resize(part.indices.size() - part.indices.size() % 3);
             out.children.push_back(std::move(part));
 
             std::vector<float> world;
@@ -211,12 +238,9 @@ const ModelAsset *ModelCache::find(const QString &path)
                 asset->vertices.push_back(out);
             }
             asset->indices.reserve(int(mesh.indices.size()));
-            for (uint32_t index : mesh.indices)
-            {
-                if (index < mesh.vertices.size())
-                    asset->indices.push_back(index);
-            }
-            asset->indices.resize(asset->indices.size() - asset->indices.size() % 3);
+            copySections(mesh, asset->indices, asset->sections);
+            for (const KModelMaterial &slot : data.materials)
+                asset->materialSlots.push_back({QString::fromStdString(slot.name), QString::fromStdString(slot.materialPath)});
 
             ChildBaker baker;
             baker.resolve = [this](const QString &p) { return resolve(p); };

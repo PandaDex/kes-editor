@@ -1,5 +1,6 @@
 #include "ui/PropertiesPanel.h"
 #include "core/EditorContext.h"
+#include "core/ModelCache.h"
 #include "ui/AssetDrag.h"
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -354,8 +355,55 @@ void PropertiesPanel::editSelected(const std::function<void(MapObject &)> &fn, c
 
 void PropertiesPanel::setKeyValue(const QString &key, const QString &value)
 {
+    // an empty slot override means none, so drop the key instead of saving it empty
+    const bool remove = value.isEmpty() && key.startsWith(QLatin1String("Material."));
     editSelected([&](MapObject &c)
-                 { c.kv[key] = value; }, tr("Edit %1").arg(key), "kv:" + key);
+                 { if (remove) c.kv.remove(key); else c.kv[key] = value; }, tr("Edit %1").arg(key), "kv:" + key);
+}
+
+const ModelAsset *PropertiesPanel::objectModel(const MapObject &o) const
+{
+    if (o.solid)
+        return nullptr;
+    const ClassDef *def = o.classname.isEmpty() ? nullptr : m_ctx->registry()->resolved(o.classname);
+    return m_ctx->models()->find(objectValue(o, "Model", def ? def->model : QString()));
+}
+
+QString PropertiesPanel::slotSignature(const MapObject &o) const
+{
+    const ModelAsset *model = objectModel(o);
+    if (!model)
+        return {};
+    QStringList parts;
+    for (const ModelSlot &slot : model->materialSlots)
+        parts << slot.name + '=' + slot.material;
+    return parts.join('\n');
+}
+
+// One material override per slot of the entity's model, stored as "Material.<slot>".
+void PropertiesPanel::addSlotEditors(QFormLayout *form, const MapObject &o)
+{
+    const ModelAsset *model = objectModel(o);
+    if (!model || model->materialSlots.isEmpty())
+        return;
+    auto *title = new QLabel(tr("Material slots"));
+    title->setObjectName("Muted");
+    title->setToolTip(tr("Overrides one slot of the model. An empty field uses the slot's material from the .kmodel,\n"
+                         "then the Material field, then the model's default material."));
+    form->addRow(title);
+    for (const ModelSlot &slot : model->materialSlots)
+    {
+        PropertyDef p;
+        p.key = "Material." + slot.name;
+        p.typeName = "material";
+        p.type = PropType::Asset;
+        p.label = slot.name;
+        p.help = tr("Material for the model's \"%1\" slot (%2)").arg(slot.name, p.key);
+        QWidget *editor = makeEditor(p, o);
+        if (auto *line = editor->findChild<QLineEdit *>())
+            line->setPlaceholderText(slot.material.isEmpty() ? tr("(Material)") : slot.material);
+        form->addRow(slot.name, editor);
+    }
 }
 
 QString PropertiesPanel::currentValue(const QString &key, const QString &def) const
@@ -377,7 +425,7 @@ void PropertiesPanel::refresh()
     const MapObject *o = m_ctx->doc()->find(sel.first());
     if (!o)
         return;
-    if (o->classname != m_builtClass)
+    if (o->classname != m_builtClass || slotSignature(*o) != m_builtSlots)
     {
         rebuild();
         return;
@@ -631,6 +679,7 @@ void PropertiesPanel::rebuild()
         return;
     }
     m_builtClass = o->classname;
+    m_builtSlots = slotSignature(*o);
 
     const QString title = !o->name.isEmpty() ? o->name : (!o->classname.isEmpty() ? o->classname : tr("Block"));
     auto *header = new QLabel(sel.size() == 1 ? QString("<b>%1</b>").arg(title.toHtmlEscaped())
@@ -730,6 +779,7 @@ void PropertiesPanel::rebuild()
                 continue;
             f->addRow(p.type == PropType::Flags ? tr("Spawn Flags") : p.label, makeEditor(p, *o));
         }
+        addSlotEditors(f, *o);
     }
     else if (!o->classname.isEmpty())
     {

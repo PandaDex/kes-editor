@@ -100,7 +100,7 @@
 	= StaticMeshEntity : "Model without animation (.kmodel)."
 [
 	Model(studio) : "Model" : : "Mesh asset (.kmodel)"
-	Material(material) : "Material" : : "Material asset (.mat)"
+	Material(material) : "Material" : : "Material asset (.mat) for parts whose slot has no material"
 	Scale(vector) : "Scale" : "1 1 1"
 	Collider(choices) : "Collider" : "" : "Collider fitted to the mesh bounds." =
 	[
@@ -114,7 +114,7 @@
 	= SkinnedModelEntity : "Animated model (.kmodel with bones)."
 [
 	Model(studio) : "Model" : : "Mesh asset (.kmodel)"
-	Material(material) : "Material" : : "Material asset (.mat)"
+	Material(material) : "Material" : : "Material asset (.mat) for parts whose slot has no material"
 	Scale(vector) : "Scale" : "1 1 1"
 	AnimGraph(string) : "Animation Graph" : : "Animation graph asset (.kagraph)"
 	AnimClip(string) : "Animation Clip" : : "Clip to play without a graph (.kanim)"

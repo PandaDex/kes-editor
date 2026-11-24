@@ -14,6 +14,8 @@ class QTableWidget;
 class QPushButton;
 class QLabel;
 struct PropertyDef;
+struct ModelAsset;
+class QFormLayout;
 
 class OutputsEditor : public QWidget
 {
@@ -58,6 +60,9 @@ private:
     void setKeyValue(const QString &key, const QString &value);
     QString currentValue(const QString &key, const QString &def) const;
     QWidget *makeEditor(const PropertyDef &p, const MapObject &o);
+    const ModelAsset *objectModel(const MapObject &o) const;
+    QString slotSignature(const MapObject &o) const;
+    void addSlotEditors(QFormLayout *form, const MapObject &o);
 
     EditorContext *m_ctx;
     QTabWidget *m_tabs;
@@ -70,6 +75,7 @@ private:
     QLineEdit *m_angles[3] = {nullptr, nullptr, nullptr};
     QMap<QString, Binding> m_bindings;
     QString m_builtClass;
+    QString m_builtSlots;
     bool m_building = false;
     bool m_editing = false;
 };

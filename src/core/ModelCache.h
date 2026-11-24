@@ -18,12 +18,27 @@ struct ModelVertex
     float r = 1.f, g = 1.f, b = 1.f, a = 1.f;
 };
 
+// A run of whole triangles drawn with one material slot (-1 = none).
+struct ModelSection
+{
+    int firstIndex = 0;
+    int indexCount = 0;
+    int slot = -1;
+    QString material; // child parts only: already resolved, empty = white
+};
+
+struct ModelSlot
+{
+    QString name;
+    QString material; // empty = the entity Material, then the default material
+};
+
 // Child model baked into the parent's model space, with the parent in bind pose.
 struct ModelChildPart
 {
     QVector<ModelVertex> vertices;
     QVector<quint32> indices;
-    QString material; // empty = white
+    QVector<ModelSection> sections;
 };
 
 // A .kmodel flattened the same way the engine draws it: every mesh, node transforms baked, bind pose.
@@ -31,6 +46,8 @@ struct ModelAsset
 {
     QVector<ModelVertex> vertices;
     QVector<quint32> indices;
+    QVector<ModelSection> sections;
+    QVector<ModelSlot> materialSlots;
     QString defaultMaterial;
     QVector<ModelChildPart> children;
     AABB bounds;                      // includes children

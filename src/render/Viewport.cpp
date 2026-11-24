@@ -15,6 +15,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QTextStream>
+#include <algorithm>
 #include <cmath>
 
 namespace
@@ -263,14 +264,16 @@ AABB Viewport::objectBounds(const MapObject &o) const
     return o.worldBounds();
 }
 
-// Same as the engine: entity Material, then the model's default, then white. Children ignore the entity Material.
+// Same as the engine, per section: entity Material.<slot>, the slot's material, entity Material, the model's
+// default, white. Child sections come resolved and ignore the entity's materials.
 void Viewport::addModel(const MapObject &o, const ModelAsset &model)
 {
     const QMatrix4x4 placement = ModelCache::placement(o);
     const QMatrix4x4 normalPlacement = placement.inverted().transposed();
     const auto knownMaterial = [&](const QString &material)
     { return !material.isEmpty() && m_ctx->materials()->find(material) ? material : QString(); };
-    const auto addTriangles = [&](const QVector<ModelVertex> &vertices, const QVector<quint32> &indices, const QString &material)
+    const auto addTriangles = [&](const QVector<ModelVertex> &vertices, const QVector<quint32> &indices,
+                                  const ModelSection &section, const QString &material)
     {
         QVector<MeshVertex> &out = m_pendingMaterialTris[material];
         auto vertex = [&](const ModelVertex &v)
@@ -280,7 +283,8 @@ void Viewport::addModel(const MapObject &o, const ModelAsset &model)
             out.push_back({p.x(), p.y(), p.z(), n.x(), n.y(), n.z(), v.u, v.v, v.r, v.g, v.b, v.a});
         };
         // engine -> editor swaps two axes, so flip the winding to keep faces front-facing
-        for (int i = 0; i + 2 < indices.size(); i += 3)
+        const int end = std::min(int(indices.size()), section.firstIndex + section.indexCount);
+        for (int i = section.firstIndex; i + 2 < end; i += 3)
         {
             vertex(vertices[int(indices[i])]);
             vertex(vertices[int(indices[i + 2])]);
@@ -289,10 +293,23 @@ void Viewport::addModel(const MapObject &o, const ModelAsset &model)
     };
 
     const QString entityMaterial = objectValue(o, "Material").trimmed();
-    addTriangles(model.vertices, model.indices,
-                 knownMaterial(entityMaterial.isEmpty() ? model.defaultMaterial : entityMaterial));
+    const QString fallback = entityMaterial.isEmpty() ? model.defaultMaterial : entityMaterial;
+    for (const ModelSection &section : model.sections)
+    {
+        QString material = fallback;
+        if (section.slot >= 0 && section.slot < model.materialSlots.size())
+        {
+            const ModelSlot &slot = model.materialSlots[section.slot];
+            const QString override = objectValue(o, "Material." + slot.name).trimmed();
+            material = !override.isEmpty() ? override : !slot.material.isEmpty() ? slot.material : fallback;
+        }
+        addTriangles(model.vertices, model.indices, section, knownMaterial(material));
+    }
     for (const ModelChildPart &child : model.children)
-        addTriangles(child.vertices, child.indices, knownMaterial(child.material));
+    {
+        for (const ModelSection &section : child.sections)
+            addTriangles(child.vertices, child.indices, section, knownMaterial(section.material));
+    }
 }
 
 const QImage *Viewport::spriteImage(const QString &path)
