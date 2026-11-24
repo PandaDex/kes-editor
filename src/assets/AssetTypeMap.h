@@ -10,7 +10,7 @@ extern const QMap<QString, QString> kAssetEditors;
 
 extern const QStringList kToolSearchDirs;
 
-// The engine's import tool (engine/tools/model-importer): model-importer <input> <output>.
+// The engine's import tool (tools/modelImporter): model-importer <input> <output>.
 extern const QString kImporterProgram;
 
 struct ImportRule

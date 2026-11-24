@@ -52,9 +52,9 @@ const QMap<QString, QString> kAssetEditors = {
 const QStringList kToolSearchDirs = {
     ".",
     "tools",
-    "../out/build/dev/engine/tools/model-importer/Debug",
-    "../out/build/dev/engine/tools/model-importer/Release",
-    "../out/build/dev/engine/tools/model-importer/RelWithDebInfo",
+    "../out/build/dev/tools/modelImporter/Debug",
+    "../out/build/dev/tools/modelImporter/Release",
+    "../out/build/dev/tools/modelImporter/RelWithDebInfo",
     "../tools/shaderGraph/build/Debug",
     "../tools/shaderGraph/build/Release",
     "../out/build/modelEditor/Debug",
