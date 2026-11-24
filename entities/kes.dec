@@ -169,3 +169,35 @@
 	input Disable(void) : "Turn the fog off."
 	input Toggle(void) : "Toggle the fog."
 ]
+
+@SolidClass base(Targetname, Kill) color(200 170 120)
+	= PostProcessVolumeEntity : "Camera post processing (exposure, bloom, vignette) while the camera is inside the volume, or everywhere when unbound. Only the settings given a value are overridden."
+[
+	Unbound(boolean) : "Unbound (global)" : 0 : "Applies everywhere, not only inside the volume."
+	BlendDistance(float) : "Blend distance (m)" : 0 : "Fades in over this distance outside the volume."
+	Priority(integer) : "Priority" : 0 : "Higher priorities are applied over lower ones."
+	Weight(float) : "Weight" : 1 : "0-1, how much of the volume's settings is blended in."
+	Active(boolean) : "Active" : 1
+
+	ExposureCompensation(float) : "Exposure compensation (EV)" : "" : "Empty = not overridden (same for every setting below)."
+	AutoExposure(choices) : "Auto exposure" : "" =
+	[
+		"" : "Not overridden"
+		"1" : "On"
+		"0" : "Off (manual exposure)"
+	]
+	AutoExposureMin(float) : "Auto exposure min (EV)" : "" : "Darkest average log2 luminance the eye adapts to (engine default -5)."
+	AutoExposureMax(float) : "Auto exposure max (EV)" : "" : "Brightest average log2 luminance the eye adapts to (engine default 3)."
+	AdaptationSpeedUp(float) : "Adaptation speed, to brighter" : "" : "Engine default 3."
+	AdaptationSpeedDown(float) : "Adaptation speed, to darker" : "" : "Engine default 1."
+	BloomIntensity(float) : "Bloom intensity" : "" : "0 = off (engine default 0.05)."
+	BloomRadius(float) : "Bloom radius" : "" : "Engine default 1."
+	VignetteIntensity(float) : "Vignette intensity" : "" : "0 = off, 1 = strong (engine default 0)."
+	VignetteSmoothness(float) : "Vignette smoothness" : "" : "0-1 (engine default 0.5)."
+	VignetteColor(vector) : "Vignette color" : "" : "Engine default 0 0 0."
+
+	input Enable(void) : "Turn the volume on."
+	input Disable(void) : "Turn the volume off."
+	input Toggle(void) : "Toggle the volume."
+	input SetWeight(float) : "Set the weight (0-1)."
+]
