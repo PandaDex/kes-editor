@@ -78,6 +78,14 @@ ProjectSettingsDialog::ProjectSettingsDialog(EditorContext *ctx, QWidget *parent
     connect(m_currentMap, &QPushButton::clicked, this, &ProjectSettingsDialog::useCurrentMap);
     form->addRow(tr("&Startup map"), withButtons(m_startupMap, { browseMap, m_currentMap }, this));
 
+    m_entityDefs = new QLineEdit(p.entityDefPathsValue == QLatin1String("editor") ? QString() : p.entityDefPathsValue, this);
+    m_entityDefs->setPlaceholderText(tr("editor"));
+    m_entityDefs->setToolTip(tr("Folders with the project's .dec entity definitions, relative to the .kproject folder, separated by ';'. "
+                                "Empty uses \"editor\". They load after Forge's own entities and can override them."));
+    auto *addDefs = new QPushButton(tr("Add Folder..."), this);
+    connect(addDefs, &QPushButton::clicked, this, &ProjectSettingsDialog::addEntityDefFolder);
+    form->addRow(tr("&Entity definitions"), withButtons(m_entityDefs, { addDefs }, this));
+
     m_status = new QLabel(this);
     m_status->setObjectName("hint");
     m_status->setWordWrap(true);
@@ -88,7 +96,7 @@ ProjectSettingsDialog::ProjectSettingsDialog(EditorContext *ctx, QWidget *parent
     connect(m_buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(m_buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
-    for (QLineEdit *e : { m_name, m_company, m_version, m_assetRoot, m_startupMap })
+    for (QLineEdit *e : { m_name, m_company, m_version, m_assetRoot, m_startupMap, m_entityDefs })
         connect(e, &QLineEdit::textChanged, this, &ProjectSettingsDialog::updateState);
     updateState();
 }
@@ -117,7 +125,7 @@ QString ProjectSettingsDialog::validate(QString *warning) const
     // Paths get their backslashes converted on save; the .kproject format has no escapes.
     if (m_company->text().contains('\\'))
         return tr("Company can't contain backslashes.");
-    for (QLineEdit *e : { m_company, m_assetRoot, m_startupMap })
+    for (QLineEdit *e : { m_company, m_assetRoot, m_startupMap, m_entityDefs })
         if (e->text().contains('"'))
             return tr("Values can't contain quotes.");
     const QString ver = m_version->text().trimmed();
@@ -199,6 +207,20 @@ void ProjectSettingsDialog::useCurrentMap()
         m_startupMap->setText(map);
 }
 
+void ProjectSettingsDialog::addEntityDefFolder()
+{
+    const QString dir = QFileDialog::getExistingDirectory(this, tr("Entity Definitions Folder"), projectDir());
+    if (dir.isEmpty())
+        return;
+    const QString rel = QDir(projectDir()).relativeFilePath(dir);
+    QStringList dirs = m_entityDefs->text().split(';', Qt::SkipEmptyParts);
+    if (dirs.isEmpty())
+        dirs << QStringLiteral("editor");
+    if (!dirs.contains(rel))
+        dirs << rel;
+    m_entityDefs->setText(dirs.join(';'));
+}
+
 void ProjectSettingsDialog::accept()
 {
     QString warning;
@@ -212,6 +234,8 @@ void ProjectSettingsDialog::accept()
         { "Version", m_version->text().trimmed() },
         { "AssetRoot", QDir::fromNativeSeparators(m_assetRoot->text().trimmed()) },
         { "StartupMap", QDir::fromNativeSeparators(m_startupMap->text().trimmed()) },
+        // the default isn't written; an empty value removes the key
+        { "EntityDefPaths", m_entityDefs->text().trimmed() == QLatin1String("editor") ? QString() : QDir::fromNativeSeparators(m_entityDefs->text().trimmed()) },
     };
     QString error;
     if (!KesProject::writeValues(path, values, &error))

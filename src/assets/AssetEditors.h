@@ -1,6 +1,7 @@
 #pragma once
 #include <QString>
 #include <QStringList>
+#include <functional>
 
 class EditorContext;
 class QWidget;
@@ -14,6 +15,9 @@ namespace AssetEditors
         NoEditor,
         Failed
     };
+
+    // Paths Forge opens itself in an editor tab (set by the main window from its modules).
+    void setForgeOpens(std::function<bool(const QString &path)> canOpen);
 
     QString editorFor(const QString &path);
     QString editorLabel(const QString &path);

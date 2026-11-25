@@ -78,6 +78,9 @@ Viewport::~Viewport()
         m_sceneVbo.destroy();
         m_vao.destroy();
         m_prog.removeAllShaders();
+        m_overlayProg.removeAllShaders();
+        if (m_overlayTex)
+            glDeleteTextures(1, &m_overlayTex);
         doneCurrent();
     }
 }
@@ -114,6 +117,21 @@ void Viewport::initializeGL()
                                    "void main(){ oCol = vCol; }\n");
     if (!m_prog.link())
         m_ctx->log("Viewport shader link failed: " + m_prog.log(), LogLevel::Error);
+
+    // full-screen triangle; the overlay image is premultiplied and stored top row first
+    m_overlayProg.addShaderFromSourceCode(QOpenGLShader::Vertex,
+                                          "#version 330 core\n"
+                                          "out vec2 vUv;\n"
+                                          "void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);\n"
+                                          "  vUv = vec2(p.x, 1.0 - p.y); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }\n");
+    m_overlayProg.addShaderFromSourceCode(QOpenGLShader::Fragment,
+                                          "#version 330 core\n"
+                                          "in vec2 vUv;\n"
+                                          "uniform sampler2D uTex;\n"
+                                          "out vec4 oCol;\n"
+                                          "void main(){ oCol = texture(uTex, vUv); }\n");
+    if (!m_overlayProg.link())
+        m_ctx->log("Viewport overlay shader link failed: " + m_overlayProg.log(), LogLevel::Error);
 
     QString materialLog;
     if (!m_materials.initialize(&materialLog))
@@ -155,7 +173,7 @@ void Viewport::rebuildSceneCache()
     m_pendingMaterialTris.clear();
     drawScene(scene);
 
-    QVector<MeshVertex> meshVertices;
+    QVector<RenderVertex> meshVertices;
     QVector<MaterialRenderer::Range> ranges;
     for (auto it = m_pendingMaterialTris.cbegin(); it != m_pendingMaterialTris.cend(); ++it)
     {
@@ -212,7 +230,7 @@ bool Viewport::addMaterialFace(const BrushFace &f)
 
     const QVector3D n = f.normal();
     const QSize size = info->textureSize();
-    QVector<MeshVertex> &out = m_pendingMaterialTris[f.material];
+    QVector<RenderVertex> &out = m_pendingMaterialTris[f.material];
     auto vertex = [&](const QVector3D &p)
     {
         const QVector2D uv = f.textureCoord(p, float(size.width()), float(size.height()));
@@ -275,7 +293,7 @@ void Viewport::addModel(const MapObject &o, const ModelAsset &model)
     const auto addTriangles = [&](const QVector<ModelVertex> &vertices, const QVector<quint32> &indices,
                                   const ModelSection &section, const QString &material)
     {
-        QVector<MeshVertex> &out = m_pendingMaterialTris[material];
+        QVector<RenderVertex> &out = m_pendingMaterialTris[material];
         auto vertex = [&](const ModelVertex &v)
         {
             const QVector3D p = placement.map(v.position);
@@ -408,7 +426,56 @@ void Viewport::paintGL()
         m_sceneVbo.release();
         m_prog.release();
     }
-    paintOverlay();
+    drawOverlay();
+}
+
+void Viewport::drawOverlay()
+{
+    const qreal dpr = devicePixelRatioF();
+    const QSize pixels = (QSizeF(size()) * dpr).toSize();
+    if (pixels.isEmpty())
+        return;
+    if (m_overlayImage.size() != pixels)
+        m_overlayImage = QImage(pixels, QImage::Format_RGBA8888_Premultiplied);
+    m_overlayImage.setDevicePixelRatio(dpr);
+    m_overlayImage.fill(Qt::transparent);
+    {
+        QPainter p(&m_overlayImage);
+        paintOverlay(p);
+    }
+
+    if (!m_overlayTex)
+    {
+        glGenTextures(1, &m_overlayTex);
+        glBindTexture(GL_TEXTURE_2D, m_overlayTex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, m_overlayTex);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    if (m_overlayTexSize != pixels)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, pixels.width(), pixels.height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, m_overlayImage.constBits());
+        m_overlayTexSize = pixels;
+    }
+    else
+    {
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, pixels.width(), pixels.height(), GL_RGBA, GL_UNSIGNED_BYTE, m_overlayImage.constBits());
+    }
+
+    QOpenGLVertexArrayObject::Binder vao(&m_vao);
+    m_overlayProg.bind();
+    m_overlayProg.setUniformValue("uTex", 0);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    glDisable(GL_BLEND);
+    m_overlayProg.release();
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void Viewport::drawGrid2D(Batch &b)
@@ -556,9 +623,8 @@ void Viewport::drawSelection(Batch &b)
     }
 }
 
-void Viewport::paintOverlay()
+void Viewport::paintOverlay(QPainter &p)
 {
-    QPainter p(this);
     p.setRenderHint(QPainter::TextAntialiasing);
     QFont f = font();
     f.setPointSize(9);

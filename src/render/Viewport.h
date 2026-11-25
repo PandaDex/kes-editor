@@ -21,6 +21,7 @@ class EditorContext;
 struct ModelAsset;
 
 class QMimeData;
+class QPainter;
 
 class Viewport : public QOpenGLWidget, protected QOpenGLFunctions
 {
@@ -65,7 +66,8 @@ private:
     void drawVerts(const QVector<Vertex> &v, GLenum mode);
     void drawCachedVerts(int first, int count, GLenum mode);
     void rebuildSceneCache();
-    void paintOverlay();
+    void paintOverlay(QPainter &p);
+    void drawOverlay();
     void flyTick();
     QColor objectColor(const MapObject &o) const;
     // Material-coloured / textured faces (3D view only). Returns false when the face has no
@@ -82,8 +84,14 @@ private:
     Camera m_cam;
 
     QOpenGLShaderProgram m_prog;
+    // Screen-space labels/sprites are painted with the raster engine and drawn as one quad:
+    // starting a QPainter on the GL surface costs ~10 ms per frame.
+    QOpenGLShaderProgram m_overlayProg;
+    QImage m_overlayImage;
+    GLuint m_overlayTex = 0;
+    QSize m_overlayTexSize;
     MaterialRenderer m_materials;
-    QHash<QString, QVector<MeshVertex>> m_pendingMaterialTris;
+    QHash<QString, QVector<RenderVertex>> m_pendingMaterialTris;
     QOpenGLVertexArrayObject m_vao;
     QOpenGLBuffer m_vbo{QOpenGLBuffer::VertexBuffer};
     QOpenGLBuffer m_sceneVbo{QOpenGLBuffer::VertexBuffer};

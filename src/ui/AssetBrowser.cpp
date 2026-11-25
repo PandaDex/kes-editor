@@ -413,12 +413,8 @@ void AssetBrowser::openEntry(const QString &path)
 
 void AssetBrowser::openAsset(const QString &path)
 {
-    if (AssetEditors::open(m_ctx, this, path) != AssetEditors::OpenResult::OpenInForge)
-        return;
-    if (path.endsWith(".fmap", Qt::CaseInsensitive))
-        emit openMapRequested(path);
-    else
-        m_ctx->log(tr("Forge only opens maps; change the entry for .%1 in kAssetEditors.").arg(QFileInfo(path).suffix()), LogLevel::Warning);
+    if (AssetEditors::open(m_ctx, this, path) == AssetEditors::OpenResult::OpenInForge)
+        emit openAssetRequested(path);
 }
 
 void AssetBrowser::createFromTemplate(const AssetTemplate &tmpl, const QString &folder)

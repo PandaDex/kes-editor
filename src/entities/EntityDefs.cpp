@@ -546,6 +546,24 @@ void EntityRegistry::addSearchPath(const QString &dir)
     m_watcher.addPath(dir);
 }
 
+bool EntityRegistry::setProjectPaths(const QStringList &dirs)
+{
+    auto existing = [](const QStringList &list)
+    {
+        QStringList out;
+        for (const QString &dir : list)
+            if (QDir(dir).exists())
+                out << dir;
+        return out;
+    };
+    const bool changed = existing(m_projectPaths) != existing(dirs);
+    for (const QString &dir : std::as_const(m_projectPaths))
+        if (!m_paths.contains(dir))
+            m_watcher.removePath(dir);
+    m_projectPaths = dirs;
+    return changed;
+}
+
 void EntityRegistry::reloadAll()
 {
     m_classes.clear();
@@ -553,7 +571,16 @@ void EntityRegistry::reloadAll()
     QStringList errors;
     QSet<QString> visited;
     int files = 0;
-    for (const QString &dir : m_paths)
+    QStringList dirs = m_paths;
+    for (const QString &dir : std::as_const(m_projectPaths))
+    {
+        if (dirs.contains(dir) || !QDir(dir).exists())
+            continue;
+        dirs << dir;
+        if (!m_watcher.directories().contains(dir))
+            m_watcher.addPath(dir);
+    }
+    for (const QString &dir : dirs)
     {
         const auto list = QDir(dir).entryInfoList({"*.dec"}, QDir::Files, QDir::Name);
         for (const QFileInfo &fi : list)

@@ -3,7 +3,8 @@
 // ---------------------------------------------------------------------------------------------
 // Which program opens each asset type: "extension" -> "program".
 //
-//   "@forge"         open in this editor (maps)
+//   "@forge"         open in this editor; extensions claimed by an editor module
+//                    (src/modules/BuiltinModules.cpp) always open in Forge
 //   "@system"        the OS default application
 //   "name"           found in kToolSearchDirs, next to forge.exe, then on PATH
 //   "dir/name.exe"   relative to the .kproject folder, or an absolute path
@@ -16,13 +17,6 @@
 // A program that can't be found is asked for once and remembered (QSettings "assetEditors/<name>").
 // ---------------------------------------------------------------------------------------------
 const QMap<QString, QString> kAssetEditors = {
-    { "fmap", "@forge" },
-    { "mat", "kesShaderGraph" },
-    { "slangnodes", "kesShaderGraph" },
-    { "kmodel", "kesModelEditor" },
-    { "ag", "kesModelEditor" },
-    { "imap", "kesInputEditor" },
-    { "po", "kesLocalizationEditor {project}" },
 
     { "rml", "code {root} {file}|notepad" },
     { "rcss", "code {root} {file}|notepad" },
@@ -55,10 +49,6 @@ const QStringList kToolSearchDirs = {
     "../out/build/dev/tools/modelImporter/Debug",
     "../out/build/dev/tools/modelImporter/Release",
     "../out/build/dev/tools/modelImporter/RelWithDebInfo",
-    "../tools/shaderGraph/build/Debug",
-    "../tools/shaderGraph/build/Release",
-    "../out/build/modelEditor/Debug",
-    "../out/build/modelEditor/Release",
 };
 
 const QString kImporterProgram = "model-importer";

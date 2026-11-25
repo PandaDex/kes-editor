@@ -14,6 +14,12 @@
 
 namespace
 {
+    std::function<bool(const QString &)> &forgeOpens()
+    {
+        static std::function<bool(const QString &)> fn;
+        return fn;
+    }
+
     QString settingsKey(const QString &name) { return "assetEditors/" + name; }
 
     QStringList baseDirs(EditorContext *ctx)
@@ -88,8 +94,15 @@ namespace
 
 namespace AssetEditors
 {
+    void setForgeOpens(std::function<bool(const QString &)> canOpen)
+    {
+        forgeOpens() = std::move(canOpen);
+    }
+
     QString editorFor(const QString &path)
     {
+        if (forgeOpens() && forgeOpens()(path))
+            return QStringLiteral("@forge");
         return kAssetEditors.value(QFileInfo(path).suffix().toLower());
     }
 

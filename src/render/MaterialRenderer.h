@@ -16,7 +16,7 @@ class MaterialLibrary;
 class MapDocument;
 
 // Colour is the vertex colour only; material values are applied by the shader.
-struct MeshVertex
+struct RenderVertex
 {
     float x, y, z;
     float nx, ny, nz;
@@ -41,7 +41,7 @@ public:
     void release();                // context current
     void releaseTextures();        // context current
 
-    void setGeometry(const QVector<MeshVertex> &vertices, const QVector<Range> &ranges);
+    void setGeometry(const QVector<RenderVertex> &vertices, const QVector<Range> &ranges);
     bool isEmpty() const { return m_ranges.isEmpty(); }
 
     // Lit only, before the frame is drawn: shadow maps and the light/sky block.

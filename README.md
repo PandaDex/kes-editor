@@ -70,9 +70,10 @@ The map autosaves every 3 minutes to `<user data>/Forge/autosave/` without touch
 
 The Asset Browser shows the content folder.
 
-- Double-click opens an asset in its editor: maps in Forge, `.mat` and `.slangnodes` in Shader
-  Graph, UI and shader files in VS Code (with the game folder as workspace), images and sounds in
-  the system default app.
+- Double-click opens an asset in its editor. Maps, materials (`.mat`), shader graphs
+  (`.slangnodes`), models (`.kmodel`), animation graphs (`.ag`), input maps (`.imap`) and `.po`
+  files open in a Forge tab; UI and shader files in VS Code (with the game folder as workspace),
+  images and sounds in the system default app.
 - Drag a material onto a face, an object, or a material field in Properties. Click one to make it
   the current material, which new blocks use.
 - Import (Ctrl+Shift+I, the Import button, or drop files on the window) converts models, textures
@@ -80,10 +81,10 @@ The Asset Browser shows the content folder.
   `<model>_<clip>.kanim` next to the model. If the browser has a subfolder open, imports go there.
 - New creates a material, UI panel, menu, HUD, stylesheet or an empty map.
 
-To change which program opens which type, edit `kAssetEditors` in `src/assets/AssetTypeMap.cpp`:
+Extensions an editor module claims (`src/modules/BuiltinModules.cpp`) always open in Forge. To
+change which program opens any other type, edit `kAssetEditors` in `src/assets/AssetTypeMap.cpp`:
 
 ```cpp
-{ "mat", "kesShaderGraph" },
 { "rml", "code {root} {file}|notepad" },
 { "png", "@system" },
 ```
@@ -95,8 +96,10 @@ used. If a program can't be found Forge asks for it once. Templates for New are 
 
 ## Entities
 
-Entity classes come from `.dec` files in `entities/` (next to the exe) or
-`<user data>/Forge/entities/`. They reload when saved. `kes.dec` has the engine's classes;
+Entity classes come from `.dec` files in `entities/` (next to the exe),
+`<user data>/Forge/entities/` and the project's folders: `EntityDefPaths` in the `.kproject`
+(`;`-separated, relative to it), `editor/` next to the `.kproject` by default. Project classes
+load last and override the others. They reload when saved. `kes.dec` has the engine's classes;
 `base.dec` explains the syntax. Tools > New Entity Class writes a class to `user.dec` from a form.
 
 ```

@@ -102,6 +102,8 @@ bool EditorContext::loadProject(const QString &kprojectPath, QString *error, boo
     m_projectDir = project.assetRoot;
     m_materials->setRoot(project.assetRoot, project.materialsDir, project.texturesDir);
     m_models->setRoot(project.assetRoot);
+    if (m_registry->setProjectPaths(project.entityDefDirs))
+        m_registry->reloadAll();
     if (remember)
         QSettings().setValue("project", project.filePath);
     emit projectDirChanged();
@@ -165,6 +167,8 @@ void EditorContext::setProjectDir(const QString &d)
     QSettings().remove("project");
     m_materials->setRoot(d);
     m_models->setRoot(d);
+    if (m_registry->setProjectPaths({}))
+        m_registry->reloadAll();
     emit projectDirChanged();
     emit projectChanged();
 }

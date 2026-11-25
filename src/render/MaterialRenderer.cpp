@@ -551,12 +551,12 @@ void MaterialRenderer::releaseTextures()
     m_textures.clear();
 }
 
-void MaterialRenderer::setGeometry(const QVector<MeshVertex> &vertices, const QVector<Range> &ranges)
+void MaterialRenderer::setGeometry(const QVector<RenderVertex> &vertices, const QVector<Range> &ranges)
 {
     m_ranges = ranges;
     m_vbo.bind();
     if (!vertices.isEmpty())
-        m_vbo.allocate(vertices.constData(), int(vertices.size() * sizeof(MeshVertex)));
+        m_vbo.allocate(vertices.constData(), int(vertices.size() * sizeof(RenderVertex)));
     m_vbo.release();
 }
 
@@ -587,7 +587,7 @@ QOpenGLTexture *MaterialRenderer::texture(const QString &material, Slot slot, co
 void MaterialRenderer::bindVertexAttributes(QOpenGLShaderProgram &program, bool full)
 {
     m_vbo.bind();
-    const int stride = sizeof(MeshVertex);
+    const int stride = sizeof(RenderVertex);
     program.enableAttributeArray(0);
     program.setAttributeBuffer(0, GL_FLOAT, 0, 3, stride);
     if (full)

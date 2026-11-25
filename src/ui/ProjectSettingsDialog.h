@@ -24,6 +24,7 @@ private:
     void browseAssetRoot();
     void browseStartupMap();
     void useCurrentMap();
+    void addEntityDefFolder();
     // Content-relative .fmapc path for a picked .fmap/.fmapc, or "" if it is outside the content folder.
     QString toStartupMap(const QString &absolutePath) const;
 
@@ -33,6 +34,7 @@ private:
     QLineEdit *m_version;
     QLineEdit *m_assetRoot;
     QLineEdit *m_startupMap;
+    QLineEdit *m_entityDefs;
     QPushButton *m_currentMap;
     QLabel *m_status;
     QDialogButtonBox *m_buttons;

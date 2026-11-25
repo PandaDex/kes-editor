@@ -29,7 +29,7 @@ public:
     void fillNewMenu(QMenu *menu);
 
 signals:
-    void openMapRequested(const QString &path);
+    void openAssetRequested(const QString &path);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;

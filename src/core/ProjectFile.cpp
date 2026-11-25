@@ -81,6 +81,12 @@ bool KesProject::load(const QString &path, KesProject &out, QString *error)
     out.materialsDir = QDir::cleanPath(root.absoluteFilePath("materials"));
     out.texturesDir = QDir::cleanPath(root.absoluteFilePath("textures"));
     out.configDir = QDir::cleanPath(projectDir.absoluteFilePath("config"));
+    out.entityDefPathsValue = values.value("EntityDefPaths").trimmed();
+    if (out.entityDefPathsValue.isEmpty())
+        out.entityDefPathsValue = QStringLiteral("editor");
+    for (const QString &dir : out.entityDefPathsValue.split(';', Qt::SkipEmptyParts))
+        if (!dir.trimmed().isEmpty())
+            out.entityDefDirs << QDir::cleanPath(projectDir.absoluteFilePath(dir.trimmed()));
 
     if (!root.exists())
     {

@@ -81,6 +81,10 @@ public:
     void declare(const ClassDef &def);
 
     void addSearchPath(const QString &dir);
+    // The current project's folders, loaded after the search paths so they can override them.
+    // Folders that don't exist yet are picked up by the next reloadAll(). Returns whether the
+    // folders that exist changed, i.e. whether a reloadAll() is needed.
+    bool setProjectPaths(const QStringList &dirs);
     void reloadAll();
     bool loadFile(const QString &path, QStringList *errors = nullptr);
 
@@ -104,6 +108,7 @@ private:
     std::map<QString, ClassDef> m_classes; // key = lower-case name
     mutable std::map<QString, ClassDef> m_cache;
     QStringList m_paths;
+    QStringList m_projectPaths;
     QFileSystemWatcher m_watcher;
     QTimer m_reloadTimer;
 };

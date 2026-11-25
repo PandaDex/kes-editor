@@ -42,12 +42,15 @@ int main(int argc, char** argv)
         return success ? 0 : 1;
     }
 
+    // One format for every GL widget: the shader graph preview runs Slang's GLSL 4.50 output, and
+    // shared contexts keep GL widgets working when their dock is floated or their tab moves.
     QSurfaceFormat fmt;
-    fmt.setVersion(3, 3);
+    fmt.setVersion(4, 5);
     fmt.setProfile(QSurfaceFormat::CoreProfile);
     fmt.setDepthBufferSize(24);
     fmt.setSamples(4);
     QSurfaceFormat::setDefaultFormat(fmt);
+    QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     // Qt's native Windows file dialogs keep the main thread blocked for seconds after closing.
     QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
 
