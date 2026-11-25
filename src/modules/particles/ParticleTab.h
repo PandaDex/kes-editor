@@ -96,7 +96,6 @@ namespace kpe
         QSplitter* m_centralSplit = nullptr;
         QStackedWidget* m_graphStack = nullptr;
         QLabel* m_stats = nullptr;
-        QLabel* m_errors = nullptr;
         QString m_contentRoot;
         Selection m_selection;
         int m_graphEmitter = -1;

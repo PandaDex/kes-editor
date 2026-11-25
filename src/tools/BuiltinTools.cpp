@@ -17,6 +17,10 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSpinBox>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
+#include <functional>
+#include <memory>
 #include <QVBoxLayout>
 
 namespace
@@ -1120,48 +1124,122 @@ QWidget *EntityTool::createOptionsPanel(QWidget *parent)
     auto *filter = new QLineEdit(w);
     filter->setPlaceholderText(tr("Filter entity classes..."));
     filter->setClearButtonEnabled(true);
-    auto *list = new QListWidget(w);
+    auto *tree = new QTreeWidget(w);
+    tree->setHeaderHidden(true);
+    tree->setRootIsDecorated(true);
     auto *desc = new QLabel(w);
     desc->setWordWrap(true);
     desc->setMinimumHeight(48);
     lay->addWidget(new QLabel(tr("Point entity class"), w));
     lay->addWidget(filter);
-    lay->addWidget(list, 1);
+    lay->addWidget(tree, 1);
     desc->hide();
 
+    constexpr int kClassRole = Qt::UserRole + 1;
     EditorContext *ctx = m_ctx;
+    auto collapsedGroups = std::make_shared<QSet<QString>>();
+    auto findClassItem = [=](const QString &name) -> QTreeWidgetItem *
+    {
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, kClassRole).toString().compare(name, Qt::CaseInsensitive) == 0)
+                return *it;
+        return nullptr;
+    };
     auto populate = [=]
     {
-        QSignalBlocker block(list);
-        list->clear();
+        QSignalBlocker block(tree);
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        {
+            const QString path = (*it)->data(0, Qt::UserRole).toString();
+            if (!path.isEmpty() && (*it)->childCount())
+            {
+                if ((*it)->isExpanded())
+                    collapsedGroups->remove(path);
+                else
+                    collapsedGroups->insert(path);
+            }
+        }
+        tree->clear();
         const QString f = filter->text().trimmed();
-        for (const ClassDef *c : ctx->registry()->classes(ClassKind::Point))
+
+        QVector<const ClassDef *> defs = ctx->registry()->classes(ClassKind::Point);
+        QVector<QPair<QString, const ClassDef *>> rows;
+        for (const ClassDef *c : defs)
         {
             if (!f.isEmpty() && !c->name.contains(f, Qt::CaseInsensitive))
                 continue;
             const ClassDef *r = ctx->registry()->resolved(c->name);
+            rows.push_back({r ? r->group : QString(), c});
+        }
+        // Groups first (alphabetically), ungrouped classes last.
+        std::stable_sort(rows.begin(), rows.end(), [](const auto &a, const auto &b)
+                         {
+            if (a.first.isEmpty() != b.first.isEmpty()) return b.first.isEmpty();
+            const int g = a.first.compare(b.first, Qt::CaseInsensitive);
+            if (g != 0) return g < 0;
+            return a.second->name.compare(b.second->name, Qt::CaseInsensitive) < 0; });
+
+        QHash<QString, QTreeWidgetItem *> groups;
+        std::function<QTreeWidgetItem *(const QString &)> groupItem = [&](const QString &path) -> QTreeWidgetItem *
+        {
+            if (path.isEmpty())
+                return nullptr;
+            if (auto it = groups.find(path); it != groups.end())
+                return *it;
+            const int slash = path.lastIndexOf('/');
+            QTreeWidgetItem *parent = slash > 0 ? groupItem(path.left(slash)) : nullptr;
+            auto *g = parent ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(tree);
+            g->setText(0, path.mid(slash + 1));
+            g->setData(0, Qt::UserRole, path);
+            g->setFlags(Qt::ItemIsEnabled);
+            QFont font = g->font(0);
+            font.setBold(true);
+            g->setFont(0, font);
+            groups.insert(path, g);
+            return g;
+        };
+
+        for (const auto &[group, c] : rows)
+        {
+            QString path;
+            for (const QString &part : group.split('/', Qt::SkipEmptyParts))
+                path += (path.isEmpty() ? "" : "/") + part.trimmed();
+            QTreeWidgetItem *parent = groupItem(path);
+            auto *it = parent ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(tree);
+            const ClassDef *r = ctx->registry()->resolved(c->name);
             QPixmap pm(12, 12);
             pm.fill(r && r->hasColor ? r->color : QColor(80, 160, 255));
-            auto *it = new QListWidgetItem(QIcon(pm), c->name, list);
-            if (c->name.compare(ctx->entityClass(), Qt::CaseInsensitive) == 0)
-                list->setCurrentItem(it);
+            it->setIcon(0, QIcon(pm));
+            it->setText(0, c->name);
+            it->setData(0, kClassRole, c->name);
+            if (r && !r->description.isEmpty())
+                it->setToolTip(0, r->description);
         }
+        for (auto it = groups.begin(); it != groups.end(); ++it)
+            it.value()->setExpanded(!f.isEmpty() || !collapsedGroups->contains(it.key()));
+        if (QTreeWidgetItem *cur = findClassItem(ctx->entityClass()))
+            tree->setCurrentItem(cur);
     };
     populate();
     connect(filter, &QLineEdit::textChanged, w, populate);
     connect(ctx->registry(), &EntityRegistry::changed, w, populate);
-    connect(list, &QListWidget::currentTextChanged, w, [=](const QString &name)
+    connect(tree, &QTreeWidget::currentItemChanged, w, [=](QTreeWidgetItem *item)
             {
+        const QString name = item ? item->data(0, kClassRole).toString() : QString();
         if (name.isEmpty()) return;
         ctx->setEntityClass(name);
         const ClassDef* r = ctx->registry()->resolved(name);
         desc->setText(r ? r->description : QString()); });
     connect(ctx, &EditorContext::entityClassChanged, w, [=]
             {
-        const auto items = list->findItems(ctx->entityClass(), Qt::MatchExactly);
-        if (!items.isEmpty()) list->setCurrentItem(items.first()); });
-    if (ctx->entityClass().isEmpty() && list->count())
-        list->setCurrentRow(0);
+        if (QTreeWidgetItem *it = findClassItem(ctx->entityClass())) tree->setCurrentItem(it); });
+    if (ctx->entityClass().isEmpty())
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if (!(*it)->data(0, kClassRole).toString().isEmpty())
+            {
+                tree->setCurrentItem(*it);
+                break;
+            }
     return w;
 }
 

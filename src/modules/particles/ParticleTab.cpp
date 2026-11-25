@@ -186,9 +186,6 @@ namespace kpe
         addDock(this, "Details", "ParticleDetailsDock", m_details, Qt::RightDockWidgetArea);
 
         m_stats = new QLabel;
-        m_errors = new QLabel;
-        m_errors->setStyleSheet("color: #e07a5f;");
-        statusBar()->addWidget(m_errors, 1);
         statusBar()->addPermanentWidget(m_stats);
 
         // Stack toolbar
@@ -284,7 +281,13 @@ namespace kpe
         connect(m_graphEditor, &nodegraph::GraphEditor::statusMessage, this, [this](const QString& t) { showStatus(t); });
         connect(m_view, &ParticleViewport::statsChanged, this, [this](int particles, int lights, double ms)
             { m_stats->setText(QString("%1 particles   %2 lights   %3 ms sim").arg(particles).arg(lights).arg(ms, 0, 'f', 2)); });
-        connect(m_view, &ParticleViewport::errorsChanged, this, [this](const QStringList& errors) { m_errors->setText(errors.join("   ")); });
+        connect(m_view, &ParticleViewport::errorsChanged, this, [this](const QStringList& errors)
+            {
+                ProblemList problems;
+                for (const QString& e : errors)
+                    problems << Problem{ ProblemSeverity::Error, e, {}, {} };
+                setProblems(problems);
+            });
 
         buildActions();
         updateContentRoot(ctx->projectDir());

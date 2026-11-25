@@ -11,7 +11,6 @@ namespace imap
     class ActionListPanel;
     class InputDocument;
     class PreviewPanel;
-    class ProblemsPanel;
 
     // .imap: the game's input actions and their key/gamepad bindings.
     class InputMapTab : public EditorTab
@@ -37,8 +36,6 @@ namespace imap
         ActionListPanel* list_;
         ActionDetailsPanel* details_;
         PreviewPanel* preview_;
-        ProblemsPanel* problems_;
-        QDockWidget* problemsDock_;
         QLabel* statusLabel_;
         QLabel* issueLabel_;
     };

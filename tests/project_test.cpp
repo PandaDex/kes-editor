@@ -76,6 +76,32 @@ int main(int argc, char** argv)
     ctx.setProjectDir(root.filePath("a/content"));
     EXPECT(ctx.registry()->find("FirstEntity") == nullptr);
 
+    // groups: engine classes are in "Engine"; @Group defaults, group() overrides, bases pass it on
+    light = ctx.registry()->resolved("LightEntity");
+    EXPECT(light && light->group == "Engine");
+    {
+        writeFile(root.filePath("groups.dec"),
+                  "@BaseClass group(\"Game/Props\") = PropBase\n[\n]\n"
+                  "@PointClass = Ungrouped : \"\"\n[\n]\n"
+                  "@Group \"Game\"\n"
+                  "@PointClass = DefaultGrouped : \"\"\n[\n]\n"
+                  "@PointClass group(\"Game/AI\") = Explicit : \"\"\n[\n]\n"
+                  "@PointClass base(PropBase) = Crate : \"\"\n[\n]\n");
+        EntityRegistry reg;
+        QStringList errors;
+        EXPECT(reg.loadFile(root.filePath("groups.dec"), &errors));
+        EXPECT(errors.isEmpty());
+        const ClassDef* c = reg.resolved("Ungrouped");
+        EXPECT(c && c->group.isEmpty());
+        c = reg.resolved("DefaultGrouped");
+        EXPECT(c && c->group == "Game");
+        c = reg.resolved("Explicit");
+        EXPECT(c && c->group == "Game/AI");
+        c = reg.resolved("Crate"); // explicit group on the base beats the file default
+        EXPECT(c && c->group == "Game/Props");
+        EXPECT(EntityRegistry::toDec(*reg.find("Explicit")).contains("group(\"Game/AI\")"));
+    }
+
     // settings and the user entities folder the context created for this test app
     QSettings().clear();
     QDir(QFileInfo(ctx.userEntityDir()).absolutePath()).removeRecursively();

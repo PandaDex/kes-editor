@@ -56,7 +56,7 @@ namespace imap
                 if (b.key.isEmpty())
                     add(Severity::Error, ai, bi, QStringLiteral("No key selected."));
                 else if (!info && b.key.startsWith(QStringLiteral("Keyboard_")))
-                    add(Severity::Error, ai, bi, QStringLiteral("\"%1\" is not a key the engine can map. It loads without an error but is bound to no scancode, so this mapping never fires. Add the key to KeyboardNameToScancode() in input.cpp first.").arg(b.key));
+                    add(Severity::Error, ai, bi, QStringLiteral("\"%1\" is not a key the engine can map. It loads without an error but is bound to no scancode, so this mapping never fires.").arg(b.key));
                 else if (!info)
                     add(Severity::Error, ai, bi, QStringLiteral("\"%1\" is not a key the engine can map. InputLoadActionMap() fails here: this action and every action after it will be missing in game.").arg(b.key));
                 else

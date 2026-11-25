@@ -63,6 +63,8 @@ struct ClassDef
     ClassKind kind = ClassKind::Point;
     QString name, description, sourceFile;
     QStringList bases;
+    QString group;     // picker group; "/" nests, e.g. "Engine/Lights"
+    QString fileGroup; // the file's @Group, used when no group() is set on the class or its bases
     bool hasColor = false;
     QColor color{80, 160, 255};
     bool hasSize = false;

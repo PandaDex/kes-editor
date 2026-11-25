@@ -7,12 +7,13 @@ class AssetImporter;
 class EditorContext;
 class EditorTab;
 class MapEditorTab;
+class ProblemsPanel;
 class QDockWidget;
 class QMenu;
 class QTabWidget;
 
 // Forge's main window: a tab per open document (the map is always the first tab), the menus of
-// the current tab, and the docks every editor shares (Asset Browser, Console).
+// the current tab, and the docks every editor shares (Asset Browser, Console, Problems).
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -61,6 +62,8 @@ private:
     ModuleRegistry m_modules;
     AssetImporter* m_importer = nullptr;
     AssetBrowser* m_assets = nullptr;
+    ProblemsPanel* m_problems = nullptr;
+    QDockWidget* m_problemsDock = nullptr;
     QTabWidget* m_tabs = nullptr;
     MapEditorTab* m_mapTab = nullptr;
 

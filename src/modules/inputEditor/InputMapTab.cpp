@@ -3,7 +3,6 @@
 #include "ActionListPanel.h"
 #include "InputDocument.h"
 #include "PreviewPanel.h"
-#include "ProblemsPanel.h"
 #include "Validator.h"
 #include "core/EditorContext.h"
 #include "ui/KesStyle.h"
@@ -34,7 +33,6 @@ namespace imap
         list_ = new ActionListPanel(doc_, this);
         details_ = new ActionDetailsPanel(doc_, this);
         preview_ = new PreviewPanel(this);
-        problems_ = new ProblemsPanel(this);
 
         setCentralWidget(details_);
 
@@ -48,13 +46,7 @@ namespace imap
         previewDock->setWidget(preview_);
         addDockWidget(Qt::RightDockWidgetArea, previewDock);
 
-        problemsDock_ = new QDockWidget(tr("Problems"), this);
-        problemsDock_->setObjectName(QStringLiteral("ProblemsDock"));
-        problemsDock_->setWidget(problems_);
-        addDockWidget(Qt::BottomDockWidgetArea, problemsDock_);
-
         resizeDocks({ listDock, previewDock }, { 290, 400 }, Qt::Horizontal);
-        resizeDocks({ problemsDock_ }, { 120 }, Qt::Vertical);
 
         statusLabel_ = new QLabel(this);
         issueLabel_ = new QLabel(this);
@@ -68,10 +60,6 @@ namespace imap
             details_->setActionIndex(idx);
             const InputMap& m = doc_->map();
             preview_->highlightAction(idx >= 0 && idx < m.actions.size() ? m.actions[idx].name : QString(), true); });
-        connect(problems_, &ProblemsPanel::locate, this, [this](int action, int binding)
-            {
-            list_->setCurrentIndex(action);
-            if (binding >= 0) details_->revealBinding(binding); });
 
         connect(doc_, &InputDocument::structureChanged, this, &InputMapTab::onDocumentChanged);
         connect(doc_, &InputDocument::contentChanged, this, &InputMapTab::onDocumentChanged);
@@ -142,7 +130,26 @@ namespace imap
 
         list_->setIssues(issues);
         details_->setIssues(issues);
-        problems_->setIssues(issues, names);
+        ProblemList problems;
+        for (const Issue& i : issues)
+        {
+            Problem p;
+            p.severity = i.severity == Severity::Error ? ProblemSeverity::Error : i.severity == Severity::Warning ? ProblemSeverity::Warning : ProblemSeverity::Info;
+            p.message = i.message;
+            p.where = i.action >= 0 && i.action < names.size() ? names[i.action] : tr("File");
+            if (i.binding >= 0) p.where += tr(" / mapping %1").arg(i.binding + 1);
+            if (i.action >= 0)
+            {
+                const int action = i.action, binding = i.binding;
+                p.locate = [this, action, binding]
+                {
+                    list_->setCurrentIndex(action);
+                    if (binding >= 0) details_->revealBinding(binding);
+                };
+            }
+            problems << p;
+        }
+        setProblems(problems);
         preview_->setText(doc_->generatedText());
         preview_->setFileLabel(doc_->filePath().isEmpty() ? tr("Not saved yet") : QFileInfo(doc_->filePath()).absoluteFilePath());
 
@@ -156,7 +163,6 @@ namespace imap
         }
         statusLabel_->setText(tr("%n input action(s), %1 mapping(s)", nullptr, map.actions.size()).arg(mappings));
         issueLabel_->setText(errors || warnings ? tr("%n error(s), %1 warning(s)", nullptr, errors).arg(warnings) : tr("No problems"));
-        problemsDock_->setWindowTitle(errors || warnings ? tr("Problems (%1)").arg(errors + warnings) : tr("Problems"));
     }
 
     QString InputMapTab::filePath() const

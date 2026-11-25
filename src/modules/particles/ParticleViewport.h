@@ -125,5 +125,8 @@ namespace kpe
         int m_targetH = 0;
         QHash<QString, std::shared_ptr<Material>> m_materials;
         QHash<QString, std::shared_ptr<Mesh>> m_meshes;
+        std::vector<ParticleLightInstance> m_lights; // from the last tick, shared with paintGL
+        QElapsedTimer m_statsClock;
+        void gatherLights();
     };
 }

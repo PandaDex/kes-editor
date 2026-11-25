@@ -6,6 +6,7 @@
 #include "particle_sim.h"
 
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QTemporaryDir>
 #include <cstdio>
 
@@ -44,6 +45,52 @@ int main(int argc, char** argv)
         for (int t = 0; t < 60; ++t)
             instance.Tick(1.0f / 30.0f);
         std::printf("%s: %zu emitter(s), %u particles after 2 s\n", argv[i], system.emitters.size(), instance.GetParticleCount());
+
+        // CPU cost of one preview frame: simulate, then build lights, sprites and ribbons.
+        ParticleCameraBasis camera;
+        camera.position = { 0.0f, 2.0f, -7.0f };
+        camera.forward = Vector3Normalize({ 0.0f, -0.2f, 1.0f });
+        camera.right = Vector3Normalize(Vector3Cross({ 0.0f, 1.0f, 0.0f }, camera.forward));
+        camera.up = Vector3Cross(camera.forward, camera.right);
+        std::vector<ParticleLightInstance> lights;
+        std::vector<ParticleSpriteInstance> sprites;
+        std::vector<ParticleRibbonPoint> points;
+        std::vector<ParticleVertex> vertices;
+        std::vector<uint32_t> indices;
+        const int frames = 300;
+        qint64 simNs = 0, extractNs = 0;
+        QElapsedTimer t;
+        for (int f = 0; f < frames; ++f)
+        {
+            t.start();
+            instance.Tick(1.0f / 60.0f);
+            simNs += t.nsecsElapsed();
+            t.start();
+            lights.clear();
+            vertices.clear();
+            indices.clear();
+            for (size_t e = 0; e < instance.GetEmitterCount(); ++e)
+                for (const ParticleRendererData& r : instance.GetEmitterData(e).renderers)
+                {
+                    if (r.type == "Light")
+                        instance.ExtractLights(e, r, lights);
+                    else if (r.type == "Sprite")
+                    {
+                        sprites.clear();
+                        instance.ExtractSprites(e, r, sprites);
+                        BuildParticleSpriteGeometry(ReadParticleSpriteSettings(r), sprites, camera, vertices, indices);
+                    }
+                    else if (r.type == "Ribbon")
+                    {
+                        points.clear();
+                        instance.ExtractRibbon(e, r, points);
+                        BuildParticleRibbonGeometry(ReadParticleRibbonSettings(r), points, camera, vertices, indices);
+                    }
+                }
+            extractNs += t.nsecsElapsed();
+        }
+        std::printf("  per frame: sim %.3f ms, lights+geometry %.3f ms (%zu lights, %zu vertices)\n", simNs / 1e6 / frames,
+            extractNs / 1e6 / frames, lights.size(), vertices.size());
     }
 
     // Every emitter template loads into the simulation without graph errors and spawns.

@@ -508,6 +508,27 @@ void MapEditorTab::setMaximizedView(Viewport* view)
     m_perspectiveAct->setChecked(m_maximizedView == m_views[0]);
 }
 
+namespace
+{
+    ProblemList problemsFromLog(const QStringList& log)
+    {
+        ProblemList problems;
+        for (const QString& line : log)
+        {
+            Problem p;
+            if (line.startsWith("Error:"))
+                p.severity = ProblemSeverity::Error;
+            else if (line.startsWith("Warning:"))
+                p.severity = ProblemSeverity::Warning;
+            else
+                continue;
+            p.message = line.mid(line.indexOf(':') + 1).trimmed();
+            problems << p;
+        }
+        return problems;
+    }
+}
+
 void MapEditorTab::buildMap()
 {
     const QString mapPath = m_ctx->doc()->filePath();
@@ -541,6 +562,8 @@ void MapEditorTab::buildMap()
                                                          : LogLevel::Info;
         m_ctx->log(line, level);
     }
+    const ProblemList problems = problemsFromLog(context.log);
+    setProblems(problems);
 
     if (success)
     {
@@ -548,6 +571,12 @@ void MapEditorTab::buildMap()
         return;
     }
 
+    if (!problems.isEmpty())
+    {
+        emit showProblemsRequested();
+        QMessageBox::critical(this, tr("Build Map Failed"), tr("The map could not be compiled. See Problems."));
+        return;
+    }
     const QString details = context.log.join('\n');
     QMessageBox::critical(this, tr("Build Map Failed"),
         tr("The map could not be compiled.\n\n%1").arg(details));
@@ -646,23 +675,14 @@ void MapEditorTab::checkProblems()
     context.registry = m_ctx->registry();
     context.map = m_ctx->doc()->snapshot();
     const bool ok = validateMap(context);
-    int warnings = 0, errors = 0;
-    for (const QString& line : context.log)
-    {
-        const LogLevel level = line.startsWith("Error:") ? LogLevel::Error
-            : line.startsWith("Warning:")                ? LogLevel::Warning
-                                                         : LogLevel::Info;
-        warnings += level == LogLevel::Warning;
-        errors += level == LogLevel::Error;
-        m_ctx->log(line, level);
-    }
-    if (ok && warnings == 0)
+    const ProblemList problems = problemsFromLog(context.log);
+    setProblems(problems);
+    if (ok && problems.isEmpty())
     {
         statusBar()->showMessage(tr("Check for Problems: no problems found."), 5000);
         return;
     }
-    QMessageBox::warning(this, tr("Check for Problems"),
-        tr("%1 error(s), %2 warning(s). See the Console for details.").arg(errors).arg(warnings));
+    emit showProblemsRequested();
 }
 
 void MapEditorTab::tieToEntity()

@@ -14,6 +14,10 @@
 //   base(A, B)             inherit properties + I/O from other classes
 //   color(r g b)           editor colour
 //   size(x y z, x y z)     point-entity bounding box (or size(x y z) = centred full size)
+//   group("Name")          entity picker group, "/" nests ("Engine/Lights"); inherited from bases
+//
+// GROUPS
+//   @Group "Name"          default group for the classes after it in the same file
 //
 // PROPERTY TYPES
 //   string integer float boolean choices flags color255 vector angle

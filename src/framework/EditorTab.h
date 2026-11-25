@@ -1,4 +1,5 @@
 #pragma once
+#include "framework/Problem.h"
 #include <QList>
 #include <QMainWindow>
 
@@ -38,6 +39,11 @@ public:
 
     const QList<QMenu*>& menus() const { return m_menus; }
 
+    // Shown in Forge's Problems dock.
+    const ProblemList& problems() const { return m_problems; }
+    void setProblems(const ProblemList& problems);
+    int problemCount(ProblemSeverity severity) const;
+
     void restoreLayout();
     void saveLayout();
 
@@ -45,6 +51,8 @@ signals:
     void titleChanged();
     void fileSaved(const QString& path);
     void openRequested(const QString& path);
+    void problemsChanged();
+    void showProblemsRequested();
 
 protected:
     QMenu* addTabMenu(const QString& title);
@@ -54,4 +62,5 @@ private:
     EditorContext* m_ctx;
     QString m_moduleId;
     QList<QMenu*> m_menus;
+    ProblemList m_problems;
 };

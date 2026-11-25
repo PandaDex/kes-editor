@@ -70,8 +70,6 @@ namespace sne
         PreviewCompiler* m_compiler;
 
         QPlainTextEdit* m_code = nullptr;
-        QListWidget* m_problems = nullptr;
-        QTabWidget* m_bottomTabs = nullptr;
         SlangHighlighter* m_highlighter = nullptr;
         QLabel* m_infoLabel = nullptr;
         QLabel* m_zoomLabel = nullptr;

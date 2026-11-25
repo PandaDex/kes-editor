@@ -86,21 +86,19 @@ namespace imap
                 // Modifiers
                 { "Keyboard_LeftShift", "Left Shift", KeyCategory::Keyboard, false, Qt::Key_Shift },
                 { "Keyboard_RightShift", "Right Shift", KeyCategory::Keyboard, false, Qt::Key_Shift },
-                { "Keyboard_LeftControl", "Left Ctrl", KeyCategory::Keyboard, false, Qt::Key_Control },
-                { "Keyboard_RightControl", "Right Ctrl", KeyCategory::Keyboard, false, Qt::Key_Control },
+                { "Keyboard_LeftCtrl", "Left Ctrl", KeyCategory::Keyboard, false, Qt::Key_Control },
+                { "Keyboard_RightCtrl", "Right Ctrl", KeyCategory::Keyboard, false, Qt::Key_Control },
                 { "Keyboard_LeftAlt", "Left Alt", KeyCategory::Keyboard, false, Qt::Key_Alt },
-                { "Keyboard_RightAlt", "Right Alt", KeyCategory::Keyboard, false, Qt::Key_Alt },
-                { "Keyboard_LeftMeta", "Left Meta", KeyCategory::Keyboard, false, Qt::Key_Meta },
-                { "Keyboard_RightMeta", "Right Meta", KeyCategory::Keyboard, false, Qt::Key_Meta },
+                { "Keyboard_RightAlt", "Right Alt", KeyCategory::Keyboard, false, Qt::Key_AltGr },
+                { "Keyboard_LeftGUI", "Left Win/Cmd", KeyCategory::Keyboard, false, Qt::Key_Meta },
+                { "Keyboard_RightGUI", "Right Win/Cmd", KeyCategory::Keyboard, false, Qt::Key_Meta },
 
                 // Main keyboard
                 { "Keyboard_Escape", "Escape", KeyCategory::Keyboard, false, Qt::Key_Escape },
                 { "Keyboard_Tab", "Tab", KeyCategory::Keyboard, false, Qt::Key_Tab },
-                { "Keyboard_Backtab", "Backtab", KeyCategory::Keyboard, false, Qt::Key_Backtab },
                 { "Keyboard_CapsLock", "Caps Lock", KeyCategory::Keyboard, false, Qt::Key_CapsLock },
                 { "Keyboard_Backspace", "Backspace", KeyCategory::Keyboard, false, Qt::Key_Backspace },
-                { "Keyboard_Return", "Return", KeyCategory::Keyboard, false, Qt::Key_Return },
-                { "Keyboard_Enter", "Enter", KeyCategory::Keyboard, false, Qt::Key_Enter },
+                { "Keyboard_Return", "Enter", KeyCategory::Keyboard, false, Qt::Key_Return },
                 { "Keyboard_Space", "Space Bar", KeyCategory::Keyboard, false, Qt::Key_Space },
                 { "Keyboard_Insert", "Insert", KeyCategory::Keyboard, false, Qt::Key_Insert },
                 { "Keyboard_Delete", "Delete", KeyCategory::Keyboard, false, Qt::Key_Delete },
@@ -115,78 +113,55 @@ namespace imap
                 { "Keyboard_Up", "Up Arrow", KeyCategory::Keyboard, false, Qt::Key_Up },
                 { "Keyboard_Down", "Down Arrow", KeyCategory::Keyboard, false, Qt::Key_Down },
 
-                // Punctuation / symbols
-                { "Keyboard_Exclam", "!", KeyCategory::Keyboard, false, Qt::Key_Exclam },
-                { "Keyboard_QuoteDbl", "\"", KeyCategory::Keyboard, false, Qt::Key_QuoteDbl },
-                { "Keyboard_NumberSign", "#", KeyCategory::Keyboard, false, Qt::Key_NumberSign },
-                { "Keyboard_Dollar", "$", KeyCategory::Keyboard, false, Qt::Key_Dollar },
-                { "Keyboard_Percent", "%", KeyCategory::Keyboard, false, Qt::Key_Percent },
-                { "Keyboard_Ampersand", "&", KeyCategory::Keyboard, false, Qt::Key_Ampersand },
-                { "Keyboard_Apostrophe", "'", KeyCategory::Keyboard, false, Qt::Key_Apostrophe },
-                { "Keyboard_ParenLeft", "(", KeyCategory::Keyboard, false, Qt::Key_ParenLeft },
-                { "Keyboard_ParenRight", ")", KeyCategory::Keyboard, false, Qt::Key_ParenRight },
-                { "Keyboard_Asterisk", "*", KeyCategory::Keyboard, false, Qt::Key_Asterisk },
-                { "Keyboard_Plus", "+", KeyCategory::Keyboard, false, Qt::Key_Plus },
-                { "Keyboard_Comma", ",", KeyCategory::Keyboard, false, Qt::Key_Comma },
-                { "Keyboard_Minus", "-", KeyCategory::Keyboard, false, Qt::Key_Minus },
-                { "Keyboard_Period", ".", KeyCategory::Keyboard, false, Qt::Key_Period },
-                { "Keyboard_Slash", "/", KeyCategory::Keyboard, false, Qt::Key_Slash },
-                { "Keyboard_Colon", ":", KeyCategory::Keyboard, false, Qt::Key_Colon },
-                { "Keyboard_Semicolon", ";", KeyCategory::Keyboard, false, Qt::Key_Semicolon },
-                { "Keyboard_Less", "<", KeyCategory::Keyboard, false, Qt::Key_Less },
-                { "Keyboard_Equal", "=", KeyCategory::Keyboard, false, Qt::Key_Equal },
-                { "Keyboard_Greater", ">", KeyCategory::Keyboard, false, Qt::Key_Greater },
-                { "Keyboard_Question", "?", KeyCategory::Keyboard, false, Qt::Key_Question },
-                { "Keyboard_At", "@", KeyCategory::Keyboard, false, Qt::Key_At },
-                { "Keyboard_BracketLeft", "[", KeyCategory::Keyboard, false, Qt::Key_BracketLeft },
-                { "Keyboard_Backslash", "\\", KeyCategory::Keyboard, false, Qt::Key_Backslash },
-                { "Keyboard_BracketRight", "]", KeyCategory::Keyboard, false, Qt::Key_BracketRight },
-                { "Keyboard_AsciiCircum", "^", KeyCategory::Keyboard, false, Qt::Key_AsciiCircum },
-                { "Keyboard_Underscore", "_", KeyCategory::Keyboard, false, Qt::Key_Underscore },
-                { "Keyboard_QuoteLeft", "`", KeyCategory::Keyboard, false, Qt::Key_QuoteLeft },
-                { "Keyboard_BraceLeft", "{", KeyCategory::Keyboard, false, Qt::Key_BraceLeft },
-                { "Keyboard_Bar", "|", KeyCategory::Keyboard, false, Qt::Key_Bar },
-                { "Keyboard_BraceRight", "}", KeyCategory::Keyboard, false, Qt::Key_BraceRight },
-                { "Keyboard_AsciiTilde", "~", KeyCategory::Keyboard, false, Qt::Key_AsciiTilde },
+                // Punctuation, by position on a US layout
+                { "Keyboard_Minus", "- (Minus)", KeyCategory::Keyboard, false, Qt::Key_Minus },
+                { "Keyboard_Equals", "= (Equals)", KeyCategory::Keyboard, false, Qt::Key_Equal },
+                { "Keyboard_LeftBracket", "[ (Left Bracket)", KeyCategory::Keyboard, false, Qt::Key_BracketLeft },
+                { "Keyboard_RightBracket", "] (Right Bracket)", KeyCategory::Keyboard, false, Qt::Key_BracketRight },
+                { "Keyboard_Backslash", "\\ (Backslash)", KeyCategory::Keyboard, false, Qt::Key_Backslash },
+                { "Keyboard_Semicolon", "; (Semicolon)", KeyCategory::Keyboard, false, Qt::Key_Semicolon },
+                { "Keyboard_Apostrophe", "' (Apostrophe)", KeyCategory::Keyboard, false, Qt::Key_Apostrophe },
+                { "Keyboard_Grave", "` (Grave)", KeyCategory::Keyboard, false, Qt::Key_QuoteLeft },
+                { "Keyboard_Comma", ", (Comma)", KeyCategory::Keyboard, false, Qt::Key_Comma },
+                { "Keyboard_Period", ". (Period)", KeyCategory::Keyboard, false, Qt::Key_Period },
+                { "Keyboard_Slash", "/ (Slash)", KeyCategory::Keyboard, false, Qt::Key_Slash },
+                { "Keyboard_NonUSHash", "Non-US #", KeyCategory::Keyboard, false, 0 },
+                { "Keyboard_NonUSBackslash", "Non-US \\", KeyCategory::Keyboard, false, 0 },
 
                 // Lock / system keys
                 { "Keyboard_NumLock", "Num Lock", KeyCategory::Keyboard, false, Qt::Key_NumLock },
                 { "Keyboard_ScrollLock", "Scroll Lock", KeyCategory::Keyboard, false, Qt::Key_ScrollLock },
-                { "Keyboard_Print", "Print Screen", KeyCategory::Keyboard, false, Qt::Key_Print },
-                { "Keyboard_SysReq", "SysReq", KeyCategory::Keyboard, false, Qt::Key_SysReq },
+                { "Keyboard_PrintScreen", "Print Screen", KeyCategory::Keyboard, false, Qt::Key_Print },
                 { "Keyboard_Pause", "Pause", KeyCategory::Keyboard, false, Qt::Key_Pause },
-                { "Keyboard_Menu", "Menu", KeyCategory::Keyboard, false, Qt::Key_Menu },
-                { "Keyboard_Help", "Help", KeyCategory::Keyboard, false, Qt::Key_Help },
+                { "Keyboard_Application", "Application (Context Menu)", KeyCategory::Keyboard, false, Qt::Key_Menu },
 
                 // Keypad
-                { "Keyboard_NumPad_0", "Numpad 0", KeyCategory::Keyboard, false, Qt::Key_0 },
-                { "Keyboard_NumPad_1", "Numpad 1", KeyCategory::Keyboard, false, Qt::Key_1 },
-                { "Keyboard_NumPad_2", "Numpad 2", KeyCategory::Keyboard, false, Qt::Key_2 },
-                { "Keyboard_NumPad_3", "Numpad 3", KeyCategory::Keyboard, false, Qt::Key_3 },
-                { "Keyboard_NumPad_4", "Numpad 4", KeyCategory::Keyboard, false, Qt::Key_4 },
-                { "Keyboard_NumPad_5", "Numpad 5", KeyCategory::Keyboard, false, Qt::Key_5 },
-                { "Keyboard_NumPad_6", "Numpad 6", KeyCategory::Keyboard, false, Qt::Key_6 },
-                { "Keyboard_NumPad_7", "Numpad 7", KeyCategory::Keyboard, false, Qt::Key_7 },
-                { "Keyboard_NumPad_8", "Numpad 8", KeyCategory::Keyboard, false, Qt::Key_8 },
-                { "Keyboard_NumPad_9", "Numpad 9", KeyCategory::Keyboard, false, Qt::Key_9 },
-                { "Keyboard_NumPad_Decimal", "Numpad Decimal", KeyCategory::Keyboard, false, Qt::Key_Period },
-                { "Keyboard_NumPad_Divide", "Numpad Divide", KeyCategory::Keyboard, false, Qt::Key_Slash },
-                { "Keyboard_NumPad_Multiply", "Numpad Multiply", KeyCategory::Keyboard, false, Qt::Key_Asterisk },
-                { "Keyboard_NumPad_Subtract", "Numpad Subtract", KeyCategory::Keyboard, false, Qt::Key_Minus },
-                { "Keyboard_NumPad_Add", "Numpad Add", KeyCategory::Keyboard, false, Qt::Key_Plus },
-                { "Keyboard_NumPad_Enter", "Numpad Enter", KeyCategory::Keyboard, false, Qt::Key_Enter },
+                { "Keyboard_Keypad0", "Numpad 0", KeyCategory::Keyboard, false, Qt::Key_0, true },
+                { "Keyboard_Keypad1", "Numpad 1", KeyCategory::Keyboard, false, Qt::Key_1, true },
+                { "Keyboard_Keypad2", "Numpad 2", KeyCategory::Keyboard, false, Qt::Key_2, true },
+                { "Keyboard_Keypad3", "Numpad 3", KeyCategory::Keyboard, false, Qt::Key_3, true },
+                { "Keyboard_Keypad4", "Numpad 4", KeyCategory::Keyboard, false, Qt::Key_4, true },
+                { "Keyboard_Keypad5", "Numpad 5", KeyCategory::Keyboard, false, Qt::Key_5, true },
+                { "Keyboard_Keypad6", "Numpad 6", KeyCategory::Keyboard, false, Qt::Key_6, true },
+                { "Keyboard_Keypad7", "Numpad 7", KeyCategory::Keyboard, false, Qt::Key_7, true },
+                { "Keyboard_Keypad8", "Numpad 8", KeyCategory::Keyboard, false, Qt::Key_8, true },
+                { "Keyboard_Keypad9", "Numpad 9", KeyCategory::Keyboard, false, Qt::Key_9, true },
+                { "Keyboard_KeypadPeriod", "Numpad .", KeyCategory::Keyboard, false, Qt::Key_Period, true },
+                { "Keyboard_KeypadDivide", "Numpad /", KeyCategory::Keyboard, false, Qt::Key_Slash, true },
+                { "Keyboard_KeypadMultiply", "Numpad *", KeyCategory::Keyboard, false, Qt::Key_Asterisk, true },
+                { "Keyboard_KeypadMinus", "Numpad -", KeyCategory::Keyboard, false, Qt::Key_Minus, true },
+                { "Keyboard_KeypadPlus", "Numpad +", KeyCategory::Keyboard, false, Qt::Key_Plus, true },
+                { "Keyboard_KeypadEnter", "Numpad Enter", KeyCategory::Keyboard, false, Qt::Key_Enter, true },
+                { "Keyboard_KeypadEquals", "Numpad =", KeyCategory::Keyboard, false, Qt::Key_Equal, true },
 
-                { "Mouse_LeftButton", "Mouse Left Button", KeyCategory::Mouse, false, 0 },
-                { "Mouse_RightButton", "Mouse Right Button", KeyCategory::Mouse, false, 0 },
-                { "Mouse_MiddleButton", "Mouse Middle Button", KeyCategory::Mouse, false, 0 },
+                { "Mouse_Left", "Mouse Left Button", KeyCategory::Mouse, false, 0 },
+                { "Mouse_Right", "Mouse Right Button", KeyCategory::Mouse, false, 0 },
+                { "Mouse_Middle", "Mouse Middle Button", KeyCategory::Mouse, false, 0 },
                 { "Mouse_Button4", "Mouse Button 4", KeyCategory::Mouse, false, 0 },
                 { "Mouse_Button5", "Mouse Button 5", KeyCategory::Mouse, false, 0 },
-
+                { "Mouse_WheelUp", "Mouse Wheel Up", KeyCategory::Mouse, false, 0 },
+                { "Mouse_WheelDown", "Mouse Wheel Down", KeyCategory::Mouse, false, 0 },
                 { "Mouse_2D_Axis", "Mouse XY 2D-Axis", KeyCategory::Mouse, true, 0 },
-                { "Mouse_X_Axis", "Mouse X-Axis", KeyCategory::Mouse, true, 0 },
-                { "Mouse_Y_Axis", "Mouse Y-Axis", KeyCategory::Mouse, true, 0 },
-                { "Mouse_Wheel", "Mouse Wheel Click", KeyCategory::Mouse, false, 0 },
-                { "Mouse_Wheel_Y", "Mouse Wheel Y-Axis", KeyCategory::Mouse, true, 0 },
 
                 // Thumbsticks
                 { "Gamepad_LeftAxis_2D", "Gamepad Left Thumbstick 2D-Axis", KeyCategory::Gamepad, true, 0 },
@@ -234,6 +209,16 @@ namespace imap
             return nullptr;
         }
 
+        QString canonicalName(const QString& engineName)
+        {
+            if (!engineName.startsWith(QStringLiteral("Keyboard_"))) return engineName;
+            QString stripped = engineName;
+            stripped.remove(QLatin1Char(' '));
+            for (const KeyInfo& k : all())
+                if (k.name.compare(stripped, Qt::CaseInsensitive) == 0) return k.name;
+            return engineName;
+        }
+
         QString categoryName(KeyCategory c)
         {
             switch (c)
@@ -245,33 +230,71 @@ namespace imap
             return {};
         }
 
-        // Qt gives the same key for left/right shift and ctrl, ask the OS which one it was
-        static bool isRightSide(const QKeyEvent* e, bool shift)
+        // Qt gives the same key for both sides of a modifier, ask the OS which one it was
+        static bool isRightSide(const QKeyEvent* e, int qtKey)
         {
 #if defined(Q_OS_WIN)
             Q_UNUSED(e)
-            return (GetKeyState(shift ? VK_RSHIFT : VK_RCONTROL) & 0x8000) != 0;
+            int vk = VK_RSHIFT;
+            if (qtKey == Qt::Key_Control) vk = VK_RCONTROL;
+            else if (qtKey == Qt::Key_Alt) vk = VK_RMENU;
+            else if (qtKey == Qt::Key_Meta) vk = VK_RWIN;
+            return (GetKeyState(vk) & 0x8000) != 0;
 #elif defined(Q_OS_MACOS)
-            return shift ? e->nativeVirtualKey() == 60 : e->nativeVirtualKey() == 62;
+            switch (qtKey)
+            {
+            case Qt::Key_Shift:   return e->nativeVirtualKey() == 60;
+            case Qt::Key_Control: return e->nativeVirtualKey() == 62;
+            case Qt::Key_Alt:     return e->nativeVirtualKey() == 61;
+            case Qt::Key_Meta:    return e->nativeVirtualKey() == 54;
+            }
+            return false;
 #elif defined(Q_OS_LINUX)
-            return shift ? e->nativeScanCode() == 62 : e->nativeScanCode() == 105;
+            switch (qtKey)
+            {
+            case Qt::Key_Shift:   return e->nativeScanCode() == 62;
+            case Qt::Key_Control: return e->nativeScanCode() == 105;
+            case Qt::Key_Alt:     return e->nativeScanCode() == 108;
+            case Qt::Key_Meta:    return e->nativeScanCode() == 134;
+            }
+            return false;
 #else
             Q_UNUSED(e)
-            Q_UNUSED(shift)
+            Q_UNUSED(qtKey)
             return false;
 #endif
         }
 
         QString nameFromKeyEvent(const QKeyEvent* e)
         {
-            const int k = e->key();
-            if (k == Qt::Key_Shift)
-                return isRightSide(e, true) ? QStringLiteral("Keyboard_RightShift") : QStringLiteral("Keyboard_LeftShift");
-            if (k == Qt::Key_Control)
-                return isRightSide(e, false) ? QStringLiteral("Keyboard_RightControl") : QStringLiteral("Keyboard_LeftControl");
+            int k = e->key();
+#if defined(Q_OS_MACOS)
+            // Qt reports Command as Control and Control as Meta
+            if (k == Qt::Key_Control) k = Qt::Key_Meta;
+            else if (k == Qt::Key_Meta) k = Qt::Key_Control;
+#endif
+            switch (k)
+            {
+            case Qt::Key_Shift:
+                return isRightSide(e, k) ? QStringLiteral("Keyboard_RightShift") : QStringLiteral("Keyboard_LeftShift");
+            case Qt::Key_Control:
+                return isRightSide(e, k) ? QStringLiteral("Keyboard_RightCtrl") : QStringLiteral("Keyboard_LeftCtrl");
+            case Qt::Key_Alt:
+                return isRightSide(e, k) ? QStringLiteral("Keyboard_RightAlt") : QStringLiteral("Keyboard_LeftAlt");
+            case Qt::Key_Meta:
+                return isRightSide(e, k) ? QStringLiteral("Keyboard_RightGUI") : QStringLiteral("Keyboard_LeftGUI");
+            case Qt::Key_Backtab:
+                return QStringLiteral("Keyboard_Tab");
+            default: break;
+            }
 
+            const bool keypad = e->modifiers().testFlag(Qt::KeypadModifier) || k == Qt::Key_Enter;
             for (const KeyInfo& info : all())
-                if (info.qtKey != 0 && info.qtKey == k && info.qtKey != Qt::Key_Shift && info.qtKey != Qt::Key_Control)
+                if (info.qtKey != 0 && info.qtKey == k && info.keypad == keypad)
+                    return info.name;
+            // Keypad arrows/home/etc. with Num Lock off, and keys Qt doesn't flag
+            for (const KeyInfo& info : all())
+                if (info.qtKey != 0 && info.qtKey == k && !info.keypad)
                     return info.name;
             return {};
         }

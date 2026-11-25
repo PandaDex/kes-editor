@@ -164,17 +164,10 @@ namespace sne
 
         m_code = makeCodeView(true);
         m_highlighter = new SlangHighlighter(m_code->document());
-        m_problems = new QListWidget;
-        m_problems->setObjectName("problemsList");
 
-        m_bottomTabs = new QTabWidget;
-        m_bottomTabs->setDocumentMode(true);
-        m_bottomTabs->addTab(m_code, "Slang Source");
-        m_bottomTabs->addTab(m_problems, "Problems");
-
-        auto* bottomDock = new QDockWidget("Shader", this);
+        auto* bottomDock = new QDockWidget("Slang Source", this);
         bottomDock->setObjectName("ShaderDock");
-        bottomDock->setWidget(m_bottomTabs);
+        bottomDock->setWidget(m_code);
         addDockWidget(Qt::BottomDockWidgetArea, bottomDock);
         auto* previewDock = new QDockWidget("Preview", this);
         previewDock->setObjectName("PreviewDock");
@@ -616,10 +609,13 @@ namespace sne
 
     void ShaderGraphTab::refreshProblems()
     {
-        m_problems->clear();
+        ProblemList problems;
         auto add = [&](bool error, const QString& text)
         {
-            m_problems->addItem(new QListWidgetItem(kes::style::icon(error ? "error" : "warning"), text));
+            Problem p;
+            p.severity = error ? ProblemSeverity::Error : ProblemSeverity::Warning;
+            p.message = text;
+            problems << p;
         };
         for (const QString& e : m_gen.errors)
             add(true, e);
@@ -630,8 +626,7 @@ namespace sne
         for (const QString& w : m_textureProblems)
             if (!w.isEmpty()) add(false, w);
 
-        const int n = m_problems->count();
-        m_bottomTabs->setTabText(1, n ? QString("Problems (%1)").arg(n) : "Problems");
+        setProblems(problems);
     }
 
 } // namespace sne

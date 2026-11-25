@@ -11,6 +11,8 @@
 //=============================================================================
 @include "base.dec"
 
+@Group "Engine"
+
 // ---------------------------------------------------------------- point entities
 @PointClass base(Targetname, Angles) color(0 255 0) size(-14 -14 -50, 14 14 50)
 	= PlayerStartEntity : "Player spawn. The box is the player volume; the player's eyes start at its centre."

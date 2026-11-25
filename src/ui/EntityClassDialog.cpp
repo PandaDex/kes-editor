@@ -41,6 +41,8 @@ EntityClassDialog::EntityClassDialog(EditorContext *ctx, QWidget *parent) : QDia
     m_kind->addItem(tr("Solid entity (@SolidClass)"), int(ClassKind::Solid));
     m_bases = new QLineEdit("Targetname");
     m_bases->setToolTip(tr("Comma-separated base classes whose properties/IO are inherited."));
+    m_group = new QLineEdit;
+    m_group->setToolTip(tr("Entity picker group. Use / to nest."));
     m_size = new QSpinBox;
     m_size->setRange(1, 1024);
     m_size->setValue(16);
@@ -62,6 +64,7 @@ EntityClassDialog::EntityClassDialog(EditorContext *ctx, QWidget *parent) : QDia
     f->addRow(tr("Description"), m_desc);
     f->addRow(tr("Type"), m_kind);
     f->addRow(tr("Base classes"), m_bases);
+    f->addRow(tr("Group"), m_group);
     f->addRow(tr("Editor color"), m_color);
     f->addRow(tr("Box size"), m_size);
     f->addRow(tr("Inputs"), m_inputs);
@@ -129,6 +132,7 @@ void EntityClassDialog::accept()
     d.description = m_desc->text();
     for (const QString &b : m_bases->text().split(',', Qt::SkipEmptyParts))
         d.bases << b.trimmed();
+    d.group = m_group->text().trimmed();
     d.hasColor = true;
     d.color = m_colorValue;
     if (d.kind == ClassKind::Point)

@@ -7,6 +7,7 @@
 #include "modules/map/MapEditorTab.h"
 #include "ui/AssetBrowser.h"
 #include "ui/KesStyle.h"
+#include "ui/ProblemsPanel.h"
 #include "ui/ProjectSettingsDialog.h"
 #include <QApplication>
 #include <QCloseEvent>
@@ -53,6 +54,7 @@ MainWindow::MainWindow()
         rebuildMenuBar();
         updateTitle();
         syncFloatingDocks();
+        if (m_problems) m_problems->scheduleRefresh();
         if (EditorTab* tab = currentTab()) tab->activated(); });
 
     createDocks();
@@ -231,6 +233,22 @@ void MainWindow::createDocks()
     auto* browser = addDock(tr("Asset Browser"), m_assets);
     auto* console = addDock(tr("Console"), new ConsolePanel(m_ctx));
     tabifyDockWidget(browser, console);
+
+    ProblemsPanel::Shell shell;
+    shell.tabs = [this]
+    {
+        QList<EditorTab*> tabs;
+        for (int i = 0; i < m_tabs->count(); ++i)
+            if (EditorTab* tab = tabAt(i)) tabs << tab;
+        return tabs;
+    };
+    shell.current = [this] { return currentTab(); };
+    shell.activate = [this](EditorTab* tab) { m_tabs->setCurrentWidget(tab); };
+    m_problems = new ProblemsPanel(std::move(shell));
+    m_problemsDock = addDock(tr("Problems"), m_problems);
+    tabifyDockWidget(console, m_problemsDock);
+    connect(m_problems, &ProblemsPanel::countChanged, this, [this](int errors, int warnings)
+        { m_problemsDock->setWindowTitle(errors + warnings ? tr("Problems (%1)").arg(errors + warnings) : tr("Problems")); });
     browser->raise();
     resizeDocks({ browser }, { 190 }, Qt::Vertical);
 }
@@ -286,6 +304,12 @@ void MainWindow::addTab(EditorTab* tab, bool closable)
     connect(tab, &EditorTab::titleChanged, this, &MainWindow::onTabTitleChanged);
     connect(tab, &EditorTab::fileSaved, this, &MainWindow::onFileSaved);
     connect(tab, &EditorTab::openRequested, this, &MainWindow::openFile);
+    connect(tab, &EditorTab::problemsChanged, m_problems, &ProblemsPanel::scheduleRefresh);
+    connect(tab, &EditorTab::showProblemsRequested, this, [this]
+        {
+        m_problemsDock->show();
+        m_problemsDock->raise(); });
+    m_problems->scheduleRefresh();
     updateTabText(tab);
     m_tabs->setCurrentIndex(index);
 }
@@ -302,7 +326,9 @@ bool MainWindow::closeTab(int index)
         return false;
     tab->saveLayout();
     m_tabs->removeTab(index);
+    tab->disconnect(this);
     tab->deleteLater();
+    m_problems->scheduleRefresh();
     return true;
 }
 

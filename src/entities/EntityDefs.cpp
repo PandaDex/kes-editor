@@ -117,6 +117,7 @@ namespace
         QStringList *errors = nullptr;
         QSet<QString> *visited = nullptr;
         int depth = 0;
+        QString defaultGroup; // @Group "Name" applies to the classes after it in this file
 
         const Tok &peek(int o = 0) const { return t[std::min(p + o, int(t.size()) - 1)]; }
         Tok next()
@@ -245,6 +246,8 @@ namespace
                     parseClass(ClassKind::Point);
                 else if (dir == "include")
                     parseInclude();
+                else if (dir == "group")
+                    defaultGroup = parseValue().trimmed();
                 else
                     skipDirective(); // @mapsize, @AutoVisGroup, @MaterialExclusion, ...
             }
@@ -257,6 +260,7 @@ namespace
             ClassDef c;
             c.kind = kind;
             c.sourceFile = file;
+            c.fileGroup = defaultGroup;
             while (!atEnd() && !isSym('='))
             {
                 const Tok m = next();
@@ -274,6 +278,10 @@ namespace
                     for (const auto &g : args)
                         for (const QString &s : g)
                             c.bases << s;
+                }
+                else if (k == "group" && !args.isEmpty())
+                {
+                    c.group = args[0].join(' ').trimmed();
                 }
                 else if (k == "color" && !args.isEmpty() && args[0].size() >= 3)
                 {
@@ -705,6 +713,10 @@ void EntityRegistry::resolveInto(const ClassDef &c, ClassDef &out, QSet<QString>
             merged.model = src.model;
         if (!src.sprite.isEmpty())
             merged.sprite = src.sprite;
+        if (!src.group.isEmpty())
+            merged.group = src.group;
+        if (!src.fileGroup.isEmpty())
+            merged.fileGroup = src.fileGroup;
     };
 
     for (const QString &b : c.bases)
@@ -738,6 +750,8 @@ const ClassDef *EntityRegistry::resolved(const QString &name) const
     QSet<QString> visiting;
     ClassDef r;
     resolveInto(it->second, r, visiting);
+    if (r.group.isEmpty())
+        r.group = r.fileGroup;
     return &(m_cache[key] = r);
 }
 
@@ -833,6 +847,8 @@ QString EntityRegistry::toDec(const ClassDef &d)
                                                                                  : "@PointClass");
     if (!d.bases.isEmpty())
         o << " base(" << d.bases.join(", ") << ")";
+    if (!d.group.isEmpty())
+        o << " group(\"" << d.group << "\")";
     if (d.hasColor)
         o << " color(" << d.color.red() << " " << d.color.green() << " " << d.color.blue() << ")";
     if (d.hasSize && d.kind == ClassKind::Point)

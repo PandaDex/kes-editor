@@ -1,4 +1,5 @@
 #include "ImapFormat.h"
+#include "KeyCatalog.h"
 
 #include <utility>
 #include <vector>
@@ -226,7 +227,7 @@ namespace imap
                 const QString& k = n.keys[i];
                 const Node& v = n.vals[i];
                 if (k == QLatin1String("key"))
-                    b.key = v.text;
+                    b.key = KeyCatalog::canonicalName(v.text);
                 else if (k == QLatin1String("modifiers"))
                 {
                     if (v.kind != Node::Array)
@@ -247,7 +248,7 @@ namespace imap
                 else if (k == QLatin1String("bPlayerAssignable"))
                     b.playerAssignable = isTrue(v.text);
                 else if (k == QLatin1String("AssignableKey"))
-                    b.assignableKey = v.text;
+                    b.assignableKey = KeyCatalog::canonicalName(v.text);
                 else
                     b.extra.push_back({ k, parser.raw(v) });
             }

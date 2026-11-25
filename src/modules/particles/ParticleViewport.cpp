@@ -33,6 +33,8 @@ vec3 lighting(vec3 p, vec3 n, bool wrap)
     {
         vec3 d = uLightPos[i].xyz - p;
         float dist = length(d);
+        if (dist >= uLightPos[i].w)
+            continue;
         float x = dist / uLightPos[i].w;
         float window = clamp(1.0 - x * x * x * x, 0.0, 1.0);
         float att = window * window / (1.0 + 4.0 * x * x);
@@ -53,6 +55,9 @@ void main() { vWorld = aPos; gl_Position = uViewProj * vec4(aPos, 1.0); }
 
         const char* kFloorFsHead = R"(#version 330 core
 in vec3 vWorld;
+uniform vec3 uSkyColor;
+uniform vec2 uFadeCenter;
+uniform float uFadeRadius;
 out vec4 fragColor;
 )";
         const char* kFloorFsBody = R"(
@@ -63,39 +68,41 @@ void main()
     vec2 g10 = abs(fract(vWorld.xz / 5.0 - 0.5) - 0.5) / fwidth(vWorld.xz / 5.0);
     float major = 1.0 - min(min(g10.x, g10.y), 1.0);
     vec3 albedo = vec3(0.32) + vec3(0.06) * line + vec3(0.1) * major;
-    float fade = clamp(1.0 - length(vWorld.xz) / 15.0, 0.0, 1.0);
-    fragColor = vec4(albedo * lighting(vWorld, vec3(0.0, 1.0, 0.0), false) * fade, 1.0);
+    float fade = clamp(1.0 - length(vWorld.xz - uFadeCenter) / uFadeRadius, 0.0, 1.0);
+    vec3 lit = albedo * lighting(vWorld, vec3(0.0, 1.0, 0.0), false);
+    fragColor = vec4(mix(uSkyColor, lit, fade * fade * (3.0 - 2.0 * fade)), 1.0);
 }
 )";
 
-        const char* kParticleVs = R"(#version 330 core
+        // Lit particles are lit per vertex: big overlapping smoke sprites would
+        // otherwise run the light loop many times per pixel.
+        const char* kParticleVsHead = R"(#version 330 core
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec2 aUv;
 layout(location = 2) in vec4 aColor;
 layout(location = 3) in vec3 aNormal;
 uniform mat4 uViewProj;
-out vec3 vWorld;
+uniform int uLit;
 out vec2 vUv;
 out vec4 vColor;
-out vec3 vNormal;
+out vec3 vLight;
+)";
+        const char* kParticleVsBody = R"(
 void main()
 {
-    vWorld = aPos;
     vUv = aUv;
     vColor = aColor;
-    vNormal = aNormal;
+    vLight = uLit != 0 ? lighting(aPos, normalize(aNormal), true) : vec3(1.0);
     gl_Position = uViewProj * vec4(aPos, 1.0);
 }
 )";
 
         const char* kParticleFsHead = R"(#version 330 core
-in vec3 vWorld;
 in vec2 vUv;
 in vec4 vColor;
-in vec3 vNormal;
+in vec3 vLight;
 uniform sampler2D uTexture;
 uniform vec4 uBaseColor;
-uniform int uLit;
 uniform int uPremultiply;
 uniform int uHasTexture;
 uniform int uShape;
@@ -112,8 +119,7 @@ void main()
         float r = clamp(1.0 - length(vUv * 2.0 - 1.0), 0.0, 1.0);
         c.a *= r * r;
     }
-    if (uLit != 0)
-        c.rgb *= lighting(vWorld, normalize(vNormal), true);
+    c.rgb *= vLight;
     c.rgb = max(c.rgb, vec3(0.0));
     c.a = clamp(c.a, 0.0, 1.0);
     if (uPremultiply != 0)
@@ -249,6 +255,7 @@ void main()
         updateTransform(0.0f);
         m_instance.SetTransform(m_instance.GetPosition(), {}, { 1.0f, 1.0f, 1.0f }, true);
         m_instance.Activate(true);
+        gatherLights();
         update();
     }
 
@@ -315,15 +322,24 @@ void main()
         else
             m_completeFor = 0.0f;
 
-        int lights = 0;
-        std::vector<ParticleLightInstance> scratch;
+        gatherLights();
+        if (!m_statsClock.isValid() || m_statsClock.elapsed() > 250)
+        {
+            m_statsClock.start();
+            emit statsChanged(int(m_instance.GetParticleCount()), int(m_lights.size()), simMs);
+        }
+        update();
+    }
+
+    void ParticleViewport::gatherLights()
+    {
+        m_lights.clear();
+        if (!m_data)
+            return;
         for (size_t e = 0; e < m_instance.GetEmitterCount(); ++e)
             for (const ParticleRendererData& r : m_instance.GetEmitterData(e).renderers)
                 if (r.enabled && r.type == "Light")
-                    m_instance.ExtractLights(e, r, scratch);
-        lights = int(scratch.size());
-        emit statsChanged(int(m_instance.GetParticleCount()), lights, simMs);
-        update();
+                    m_instance.ExtractLights(e, r, m_lights);
     }
 
     QVector3D ParticleViewport::eye() const
@@ -365,7 +381,7 @@ void main()
         initializeOpenGLFunctions();
         const QString lightingHead = QString::fromLatin1(kLightingGlsl);
         const bool ok = build(m_floorProgram, kFloorVs, QString(kFloorFsHead) + lightingHead + kFloorFsBody) &&
-            build(m_particleProgram, kParticleVs, QString(kParticleFsHead) + lightingHead + kParticleFsBody) &&
+            build(m_particleProgram, QString(kParticleVsHead) + lightingHead + kParticleVsBody, QString(kParticleFsHead) + kParticleFsBody) &&
             build(m_meshProgram, kMeshVs, QString(kMeshFsHead) + lightingHead + kMeshFsBody) &&
             build(m_tonemapProgram, kTonemapVs, kTonemapFs);
         if (!ok)
@@ -375,7 +391,7 @@ void main()
             return;
         }
 
-        const float s = 30.0f;
+        const float s = 1000.0f;
         const float floorVerts[] = { -s, 0, -s, s, 0, -s, s, 0, s, -s, 0, -s, s, 0, s, -s, 0, s };
         glGenVertexArrays(1, &m_floorVao);
         glGenBuffers(1, &m_floorVbo);
@@ -446,8 +462,9 @@ void main()
 
     void ParticleViewport::ensureTargets()
     {
-        const int w = std::max(1, int(width() * devicePixelRatioF()));
-        const int h = std::max(1, int(height() * devicePixelRatioF()));
+        // Logical pixels: on scaled displays this is far fewer pixels to shade; the tonemap upscales.
+        const int w = std::max(1, width());
+        const int h = std::max(1, height());
         if (m_fbo && w == m_targetW && h == m_targetH)
             return;
         if (!m_fbo)
@@ -570,17 +587,11 @@ void main()
         view.lookAt(flip.map(e), flip.map(m_target), QVector3D(0, 1, 0));
         view = view * flip;
         QMatrix4x4 proj;
-        proj.perspective(60.0f, float(m_targetW) / float(std::max(m_targetH, 1)), 0.05f, 500.0f);
+        proj.perspective(60.0f, float(m_targetW) / float(std::max(m_targetH, 1)), 0.05f, 2000.0f);
         m_viewProj = proj * view;
         const ParticleCameraBasis basis = cameraBasis();
 
-        // Lights from every light renderer.
-        std::vector<ParticleLightInstance> lights;
-        if (m_data)
-            for (size_t ei = 0; ei < m_instance.GetEmitterCount(); ++ei)
-                for (const ParticleRendererData& r : m_instance.GetEmitterData(ei).renderers)
-                    if (r.enabled && r.type == "Light")
-                        m_instance.ExtractLights(ei, r, lights);
+        std::vector<ParticleLightInstance> lights = m_lights;
         if (lights.size() > size_t(kMaxPreviewLights))
         {
             std::partial_sort(lights.begin(), lights.begin() + kMaxPreviewLights, lights.end(),
@@ -615,6 +626,10 @@ void main()
         {
             m_floorProgram.bind();
             m_floorProgram.setUniformValue("uViewProj", m_viewProj);
+            m_floorProgram.setUniformValue("uSkyColor", QVector3D(clear[sky][0], clear[sky][1], clear[sky][2]));
+            // Follows the orbit target so the floor never ends inside the view, even framed on a big effect.
+            m_floorProgram.setUniformValue("uFadeCenter", QVector2D(m_target.x(), m_target.z()));
+            m_floorProgram.setUniformValue("uFadeRadius", std::max(15.0f, m_distance * 2.5f));
             setLights(m_floorProgram);
             glBindVertexArray(m_floorVao);
             glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -742,7 +757,7 @@ void main()
         }
 
         glBindFramebuffer(GL_FRAMEBUFFER, screenFbo);
-        glViewport(0, 0, m_targetW, m_targetH);
+        glViewport(0, 0, std::max(1, int(width() * devicePixelRatioF())), std::max(1, int(height() * devicePixelRatioF())));
         glDisable(GL_DEPTH_TEST);
         m_tonemapProgram.bind();
         m_tonemapProgram.setUniformValue("uScene", 0);

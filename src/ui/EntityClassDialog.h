@@ -26,6 +26,7 @@ private:
     QPushButton* m_color;
     QSpinBox* m_size;
     QLineEdit* m_bases;
+    QLineEdit* m_group;
     QLineEdit* m_outputs;
     QLineEdit* m_inputs;
     QTableWidget* m_props;

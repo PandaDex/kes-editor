@@ -4,6 +4,7 @@
 #include <QMessageBox>
 #include <QSettings>
 #include <QStatusBar>
+#include <algorithm>
 
 EditorTab::EditorTab(EditorContext* ctx, const QString& moduleId, QWidget* parent)
     : QMainWindow(parent, Qt::Widget)
@@ -50,6 +51,17 @@ QMenu* EditorTab::addTabMenu(const QString& title)
     auto* menu = new QMenu(title, this);
     m_menus << menu;
     return menu;
+}
+
+void EditorTab::setProblems(const ProblemList& problems)
+{
+    m_problems = problems;
+    emit problemsChanged();
+}
+
+int EditorTab::problemCount(ProblemSeverity severity) const
+{
+    return int(std::count_if(m_problems.begin(), m_problems.end(), [severity](const Problem& p) { return p.severity == severity; }));
 }
 
 void EditorTab::showStatus(const QString& text, int timeoutMs)
