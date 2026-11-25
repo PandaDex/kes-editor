@@ -16,6 +16,7 @@ namespace nodegraph
         Q_OBJECT
     public:
         explicit NodeGraphScene(GraphModel* model, QObject* parent = nullptr);
+        ~NodeGraphScene() override;
 
         GraphModel* model() const { return m_model; }
         NodeItem* nodeItem(int id) const { return m_nodeItems.value(id); }

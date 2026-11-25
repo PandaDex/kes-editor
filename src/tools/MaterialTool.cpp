@@ -323,11 +323,6 @@ QWidget *MaterialTool::createOptionsPanel(QWidget *parent)
     auto *panel = new QWidget(parent);
     auto *layout = new QVBoxLayout(panel);
 
-    auto *hint = new QLabel(tr("<small>Materials live in the Asset Browser: click one to make it current, drag it "
-                               "onto a face (Shift: whole object), or double-click it to apply it to the selection.</small>"), panel);
-    hint->setWordWrap(true);
-    layout->addWidget(hint);
-
     auto *current = new QFormLayout;
     m_materialLabel = new QLabel(m_ctx->currentMaterial().isEmpty() ? tr("(none)") : m_ctx->currentMaterial(), panel);
     m_materialLabel->setWordWrap(true);
@@ -347,7 +342,7 @@ QWidget *MaterialTool::createOptionsPanel(QWidget *parent)
     applyRow->addWidget(clear);
     layout->addLayout(applyRow);
 
-    auto *mappingTitle = new QLabel(tr("<b>Texture mapping</b><br><small>Selected faces (Ctrl+Click), or all faces of the selected objects. Scale = world units per texel.</small>"), panel);
+    auto *mappingTitle = new QLabel(tr("<b>Texture mapping</b>"), panel);
     mappingTitle->setWordWrap(true);
     layout->addWidget(mappingTitle);
 

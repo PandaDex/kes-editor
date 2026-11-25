@@ -243,7 +243,7 @@ namespace imap
 
         if (b->modifiers.isEmpty())
         {
-            auto* none = new QLabel(tr("No modifiers. The raw key value is used as-is."), body);
+            auto* none = new QLabel(tr("No modifiers."), body);
             none->setObjectName(QStringLiteral("Muted"));
             v->addWidget(none);
         }
@@ -374,7 +374,7 @@ namespace imap
         }
         case ModifierType::Unknown:
         {
-            auto* l = new QLabel(tr("Not supported by the engine. Kept in the file unchanged."), row);
+            auto* l = new QLabel(tr("Not supported by the engine."), row);
             l->setObjectName(QStringLiteral("Muted"));
             l->setWordWrap(true);
             v->addWidget(l);

@@ -125,12 +125,12 @@ void AddLanguageDialog::validate()
     const QString c = code();
     bool ok = false;
     if (c.isEmpty()) {
-        info_->setText(QStringLiteral("A gettext code: two letters, optionally a region (pl, de, pt_BR)."));
+        info_->setText(QString());
     } else if (existing_.contains(c)) {
         info_->setText(QStringLiteral("%1 already exists.").arg(c));
     } else {
         ok = true;
-        info_->setText(QStringLiteral("Creates localization/%1.po (%2) with every key, untranslated.<br>Plural-Forms: <code>%3</code>")
+        info_->setText(QStringLiteral("localization/%1.po (%2)<br>Plural-Forms: <code>%3</code>")
                            .arg(c, languageName(c).toHtmlEscaped(), pluralFormsFor(c).toHtmlEscaped()));
     }
     buttons_->button(QDialogButtonBox::Ok)->setEnabled(ok);
@@ -145,7 +145,7 @@ ProjectSettingsDialog::ProjectSettingsDialog(const ProjectSettings& settings, QW
     source_->setToolTip(QStringLiteral("Language the msgids are written in; must match LocalizationSetSourceLanguage (default en)"));
     form->addRow(QStringLiteral("Source language"), source_);
     folders_ = new QPlainTextEdit(settings.extraFolders.join(QLatin1Char('\n')), this);
-    folders_->setPlaceholderText(QStringLiteral("One folder per line, e.g. engine sources that use game keys"));
+    folders_->setPlaceholderText(QStringLiteral("One folder per line"));
     folders_->setMaximumHeight(90);
     auto* browse = new QPushButton(QStringLiteral("Add Folder..."), this);
     auto* folderBox = new QVBoxLayout;
@@ -156,12 +156,6 @@ ProjectSettingsDialog::ProjectSettingsDialog(const ProjectSettings& settings, QW
     functions_->setToolTip(QStringLiteral("C++ functions whose first argument is a key string literal"));
     form->addRow(QStringLiteral("C++ functions"), functions_);
     layout->addLayout(form);
-    auto* note = new QLabel(QStringLiteral("The project folder (where the .kproject is) is always scanned. "
-                                           "Folders named .git, .vs, .vscode, out, build and bin are skipped, and so are .po files."),
-                            this);
-    note->setWordWrap(true);
-    note->setStyleSheet(QStringLiteral("color: %1;").arg(kes::style::muted().name()));
-    layout->addWidget(note);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);

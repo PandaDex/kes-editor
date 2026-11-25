@@ -52,7 +52,7 @@ DetailsPanel::DetailsPanel(QWidget* parent) : QWidget(parent)
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
 
-    emptyLabel_ = new QLabel(QStringLiteral("Select a key to edit it in every visible language."), this);
+    emptyLabel_ = new QLabel(QStringLiteral("No key selected."), this);
     emptyLabel_->setAlignment(Qt::AlignCenter);
     emptyLabel_->setWordWrap(true);
     emptyLabel_->setStyleSheet(QStringLiteral("color: %1;").arg(kes::style::muted().name()));
@@ -76,7 +76,7 @@ DetailsPanel::DetailsPanel(QWidget* parent) : QWidget(parent)
     keyEdit_->setToolTip(QStringLiteral("Used as #Key in code and UI. Press Enter to rename it in every language."));
     form->addRow(QStringLiteral("Key  #"), keyEdit_);
     note_ = makeTextEdit(content_, 2);
-    note_->setPlaceholderText(QStringLiteral("Context for translators (where it is shown, length limits...)"));
+    note_->setPlaceholderText(QStringLiteral("Translator note"));
     form->addRow(QStringLiteral("Note"), note_);
     references_ = new QListWidget(content_);
     references_->setMaximumHeight(110);

@@ -44,8 +44,7 @@ void GraphParamsPanel::rebuild()
         lay->addWidget(err);
     }
     if (instance.Parameters().empty()) {
-        auto* l = new QLabel("Add Float, Bool or Int Parameter nodes to drive the graph. Their values can be tried out here; "
-                             "in the game, code sets them with SetAnimFloat / SetAnimBool / SetAnimInt.");
+        auto* l = new QLabel("No parameters.");
         l->setObjectName("Muted");
         l->setWordWrap(true);
         lay->addWidget(l);

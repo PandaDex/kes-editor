@@ -25,7 +25,7 @@ namespace nodegraph
         lay->setSpacing(4);
 
         m_edit = new QLineEdit;
-        m_edit->setPlaceholderText(QString::fromUtf8("Search nodes…  (↑↓ to pick, Enter to add)"));
+        m_edit->setPlaceholderText(QString::fromUtf8("Search nodes…"));
         m_edit->setClearButtonEnabled(true);
         m_list = new QListWidget;
         m_list->setUniformItemSizes(true);

@@ -243,7 +243,6 @@ namespace kme
         QString info = node.boneIndex >= 0 ? QString("Bone %1").arg(node.boneIndex) : QString("Node (not a bone)");
         if (node.parentIndex >= 0) info += QString("  ·  parent %1").arg(QString::fromStdString(model.nodes[size_t(node.parentIndex)].name));
         lay->addWidget(note(info));
-        lay->addWidget(note("Use the Skeleton panel's Socket and Collider buttons to attach to this bone."));
     }
 
     void AttachmentPanel::buildModel(QVBoxLayout* lay)
@@ -258,9 +257,6 @@ namespace kme
         auto* material = new PathEdit(m_preview, "Default Material", "Materials (*.mat)");
         material->setPlaceholder("(none: white)");
         form->addRow("Default material", material);
-        lay->addWidget(note("Used wherever this model is placed without its own Material, for every part whose slot has "
-                            "no material. A Material set on the entity (Forge's Material field) replaces it; child models "
-                            "keep theirs."));
         connect(material, &PathEdit::edited, this, [this](const QString& path)
             {
         if (path.toStdString() == m_doc->model().defaultMaterial) return;
@@ -286,9 +282,6 @@ namespace kme
         };
         m_refresh();
 
-        lay->addSpacing(12);
-        lay->addWidget(note("Select a bone, socket, collider or child model in the Skeleton panel or click one in the viewport.\n\n"
-                            "Left-drag: orbit   Shift/middle-drag: pan\nWheel or right-drag: zoom   F: frame"));
     }
 
     // Slots (name + material) and, per mesh part, which slot it draws with.
@@ -364,7 +357,7 @@ namespace kme
             if (!name->hasFocus()) name->setText(QString::fromStdString(slot.name));
             path->setPath(QString::fromStdString(slot.materialPath)); });
         }
-        if (slotList().empty()) lay->addWidget(note("No slots: the whole model uses one material."));
+        if (slotList().empty()) lay->addWidget(note("No slots."));
 
         const KModelData& model = m_doc->model();
         bool anyPart = false;
@@ -409,9 +402,6 @@ namespace kme
             partsTitle->setObjectName("Title");
             lay->addWidget(partsTitle);
             lay->addLayout(parts);
-            lay->addWidget(note("Each part draws with its slot's material. A part with no slot, or a slot with no material, "
-                                "uses the entity Material, then the default material. Forge can override one slot per entity "
-                                "(Material.<slot>)."));
         }
         else
         {
@@ -440,9 +430,6 @@ namespace kme
         form->addRow("Position", pos);
         form->addRow("Rotation", rot);
         form->addRow("Scale", scale);
-        form->addRow(note("Drawn attached to the bone in the game and in Forge. An empty Material uses the child model's "
-                          "default material. The Animation (a .kanim clip or a .ag) plays on its own; game code "
-                          "drives it with SetChildAnimation / SetChildAnim* by this name. Press Space to preview it."));
 
         const auto apply = [this, index](const QString& text, const QString& key, const std::function<void(KModelChild&)>& fn)
         {
@@ -604,8 +591,6 @@ namespace kme
         buttons->addWidget(fitBone);
         buttons->addWidget(fitMesh);
         form->addRow(buttons);
-        form->addRow(note("Capsules run along their local Y axis. Colliders on a bone follow its animation in the game; "
-                          "on a Dynamic model all colliders form one rigid body in the bind pose."));
 
         const auto apply = [this, index](const QString& text, const QString& key, const std::function<void(KModelCollider&)>& fn)
         {

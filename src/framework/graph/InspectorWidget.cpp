@@ -115,14 +115,8 @@ namespace nodegraph
 
         if (m_selection.size() != 1 || !m_model->node(m_selection.first()))
         {
-            QString help = "Select a node to edit it.\n\n"
-                           "Tab or right-click: add a node\n"
-                           "Drag from a port: connect\n"
-                           "Middle-drag / Space-drag: pan\n"
-                           "Wheel: zoom   F: frame all";
-            const QString extra = m_model->domain().inspectorHint();
-            if (!extra.isEmpty()) help += "\n\n" + extra;
-            lay->addWidget(note(m_selection.isEmpty() ? help : QString("%1 nodes selected.").arg(m_selection.size())));
+            if (!m_selection.isEmpty())
+                lay->addWidget(note(QString("%1 nodes selected.").arg(m_selection.size())));
             return;
         }
 
@@ -133,7 +127,6 @@ namespace nodegraph
         auto* title = new QLabel(QString("<b style='font-size:13pt'>%1</b>").arg(d->title));
         lay->addWidget(title);
         lay->addWidget(note(QString::fromUtf8("%1  ·  node #%2").arg(d->category).arg(id)));
-        lay->addWidget(note(d->description));
 
         if (!d->params.isEmpty())
         {

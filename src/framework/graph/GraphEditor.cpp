@@ -60,9 +60,6 @@ namespace nodegraph
         m_tree->setIndentation(14);
         lay->addWidget(m_search);
         lay->addWidget(m_tree);
-        auto* hint = new QLabel("Double-click or drag onto the canvas.");
-        hint->setObjectName("Muted");
-        lay->addWidget(hint);
 
         const NodeCatalog& catalog = domain->catalog();
         for (const QString& cat : catalog.categories())

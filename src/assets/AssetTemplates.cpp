@@ -1,4 +1,5 @@
 #include "assets/AssetTemplates.h"
+#include "modules/particles/ParticleDocument.h"
 #include "core/EditorContext.h"
 #include "core/MapDocument.h"
 #include <QDir>
@@ -210,6 +211,7 @@ const QList<AssetTemplate> &assetTemplates()
         {"UI HUD", "rml", "ui", kUiHud, false},
         {"UI Stylesheet", "rcss", "ui", kUiStyle, false},
         {"Map", "fmap", "maps", {}, false},
+        {"Particle System", "kfx", "particles", {}, true},
     };
     return templates;
 }
@@ -249,6 +251,12 @@ QString createAsset(EditorContext *ctx, QWidget *parent, const AssetTemplate &tm
         {
             MapDocument map;
             written = map.saveCopy(path, &error);
+        }
+        else if (tmpl.suffix == "kfx")
+        {
+            kpe::ParticleDocument particles;
+            particles.reset(kpe::makeDefaultSystem());
+            written = particles.saveAs(path, &error);
         }
         else
         {

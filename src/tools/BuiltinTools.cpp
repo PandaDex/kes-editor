@@ -989,10 +989,6 @@ QWidget *BlockTool::createOptionsPanel(QWidget *parent)
     auto *w = new QWidget(parent);
     auto *f = new QFormLayout(w);
     f->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-    auto *hint = new QLabel(tr("Drag in a 2D view or on a surface in the 3D view. In 2D the depth follows the current selection, like Hammer."), w);
-    hint->setWordWrap(true);
-    hint->setObjectName("hint");
-    f->addRow(hint);
 
     auto *shape = new QComboBox(w);
     for (Primitives::Kind k : {Primitives::Kind::Block, Primitives::Kind::Wedge, Primitives::Kind::Cylinder,
@@ -1131,7 +1127,7 @@ QWidget *EntityTool::createOptionsPanel(QWidget *parent)
     lay->addWidget(new QLabel(tr("Point entity class"), w));
     lay->addWidget(filter);
     lay->addWidget(list, 1);
-    lay->addWidget(desc);
+    desc->hide();
 
     EditorContext *ctx = m_ctx;
     auto populate = [=]
@@ -1340,10 +1336,6 @@ QWidget *ClipTool::createOptionsPanel(QWidget *parent)
 {
     auto *w = new QWidget(parent);
     auto *lay = new QVBoxLayout(w);
-    auto *hint = new QLabel(tr("Drag a line across the selected solids in a 2D view. Drag the end points to adjust it."), w);
-    hint->setWordWrap(true);
-    hint->setObjectName("hint");
-    lay->addWidget(hint);
     auto *group = new QButtonGroup(w);
     const QString labels[] = {tr("Keep both sides"), tr("Keep front side"), tr("Keep back side")};
     for (int i = 0; i < 3; ++i)

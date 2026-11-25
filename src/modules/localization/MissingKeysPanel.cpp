@@ -94,9 +94,9 @@ void MissingKeysPanel::refresh(const LocProject* project, const ScanResult* scan
     }
 
     if (!scan)
-        summary_->setText(QStringLiteral("Not scanned yet. Rescan finds #Keys used in content and source files."));
+        summary_->setText(QStringLiteral("Not scanned yet."));
     else if (missing_.isEmpty())
-        summary_->setText(QStringLiteral("Every key used in the project is defined (%1 files scanned).").arg(scan->filesScanned));
+        summary_->setText(QStringLiteral("All keys defined (%1 files scanned).").arg(scan->filesScanned));
     else
         summary_->setText(QStringLiteral("<span style=\"color:%1\">%2 keys</span> are used but not in any .po file (%3 files scanned).")
                               .arg(kes::style::warning().name())

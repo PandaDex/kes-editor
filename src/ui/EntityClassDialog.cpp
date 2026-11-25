@@ -85,7 +85,7 @@ EntityClassDialog::EntityClassDialog(EditorContext *ctx, QWidget *parent) : QDia
     connect(rem, &QPushButton::clicked, this, [this]
             { if (m_props->currentRow() >= 0) m_props->removeRow(m_props->currentRow()); });
 
-    auto *note = new QLabel(tr("Saved to %1/user.dec and reloaded immediately. For choices/spawnflags, edit the .dec directly.").arg(ctx->userEntityDir()));
+    auto *note = new QLabel(tr("Saved to %1/user.dec.").arg(ctx->userEntityDir()));
     note->setWordWrap(true);
     note->setObjectName("Muted");
     lay->addWidget(note);

@@ -19,6 +19,9 @@ add_library(forge_engine STATIC
     ${KES_ENGINE_DIR}/anim_blend_tree.cpp
     ${KES_ENGINE_DIR}/text_block_file.cpp
     ${KES_ENGINE_DIR}/po_catalog.cpp
+    ${KES_ENGINE_DIR}/particle_asset.cpp
+    ${KES_ENGINE_DIR}/particle_graph.cpp
+    ${KES_ENGINE_DIR}/particle_sim.cpp
     engine/EngineFileIo.cpp)
 target_include_directories(forge_engine PUBLIC ${KES_ENGINE_DIR})
 target_compile_definitions(forge_engine PUBLIC KES_PROFILING=0 _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -56,7 +59,7 @@ add_custom_command(TARGET forge POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_dire
 
 include(CTest)
 if(BUILD_TESTING)
-    foreach(test shadergraph_test modeleditor_test localization_test project_test)
+    foreach(test shadergraph_test modeleditor_test localization_test project_test particles_test)
         add_executable(forge_${test} tests/${test}.cpp)
         target_link_libraries(forge_${test} PRIVATE forge_core)
         if(MSVC)

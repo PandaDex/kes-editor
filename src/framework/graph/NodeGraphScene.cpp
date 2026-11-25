@@ -47,6 +47,16 @@ namespace nodegraph
         rebuild();
     }
 
+    NodeGraphScene::~NodeGraphScene()
+    {
+        // ~QGraphicsScene clears the items after this class is gone; removing a selected
+        // item emits selectionChanged, which must not reach onSelectionChanged any more.
+        // m_model may already be gone (owned elsewhere); Qt dropped its connections then.
+        disconnect(this, nullptr, this, nullptr);
+        blockSignals(true);
+        clear();
+    }
+
     void NodeGraphScene::onNodeAdded(int id)
     {
         if (m_nodeItems.contains(id)) return;

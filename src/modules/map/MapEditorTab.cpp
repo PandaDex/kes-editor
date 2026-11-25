@@ -418,12 +418,7 @@ void MapEditorTab::createDocks()
     {
         QWidget* panel = t->createOptionsPanel(m_optionsStack);
         if (!panel)
-        {
-            panel = new QLabel(t->statusHint());
-            static_cast<QLabel*>(panel)->setWordWrap(true);
-            static_cast<QLabel*>(panel)->setAlignment(Qt::AlignTop | Qt::AlignLeft);
-            panel->setContentsMargins(8, 8, 8, 8);
-        }
+            panel = new QWidget;
         m_optionsIndex[t->id()] = m_optionsStack->addWidget(panel);
     }
     m_optionsStack->setCurrentIndex(m_optionsIndex.value(m_ctx->tools()->current()->id()));
@@ -740,9 +735,6 @@ void MapEditorTab::showTransformDialog()
         h->addWidget(val[i]);
     }
     form->addRow(tr("Values"), row);
-    auto* note = new QLabel(tr("Rotation and scale pivot around the centre of the selection."), &dlg);
-    note->setObjectName("hint");
-    form->addRow(note);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     form->addRow(buttons);
     connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);

@@ -148,7 +148,7 @@ namespace imap
 
         if (action.bindings.isEmpty())
         {
-            auto* hint = new QLabel(tr("No mappings. Add one to bind a key, mouse axis or gamepad input to this action."), mappings);
+            auto* hint = new QLabel(tr("No mappings."), mappings);
             hint->setObjectName(QStringLiteral("Muted"));
             hint->setWordWrap(true);
             mappings->bodyLayout()->addWidget(hint);

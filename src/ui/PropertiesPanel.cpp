@@ -306,8 +306,8 @@ void OutputsEditor::reload()
     m_loading = false;
     m_add->setEnabled(o != nullptr);
     m_remove->setEnabled(o != nullptr);
-    m_hint->setText(o ? tr("MapScript: outputs fire when something happens to this entity and send an input to the target.")
-                      : (sel.isEmpty() ? tr("Nothing selected.") : tr("Select a single entity to edit its outputs.")));
+    m_hint->setText(o ? QString() : (sel.isEmpty() ? tr("Nothing selected.") : tr("Select a single entity.")));
+    m_hint->setVisible(!m_hint->text().isEmpty());
 }
 
 PropertiesPanel::PropertiesPanel(EditorContext *ctx, QWidget *parent) : QWidget(parent), m_ctx(ctx)
@@ -769,10 +769,6 @@ void PropertiesPanel::rebuild()
     const ClassDef *def = o->classname.isEmpty() ? nullptr : m_ctx->registry()->resolved(o->classname);
     if (def)
     {
-        auto *desc = new QLabel(def->description);
-        desc->setWordWrap(true);
-        desc->setObjectName("Muted");
-        lay->insertWidget(1, desc);
         for (const PropertyDef &p : def->props)
         {
             if (isBuiltinKey(p.key))
@@ -783,7 +779,7 @@ void PropertiesPanel::rebuild()
     }
     else if (!o->classname.isEmpty())
     {
-        auto *warn = new QLabel(tr("No definition found for class '%1'.\nAdd it to an .dec file (Tools > New Entity Class...).").arg(o->classname));
+        auto *warn = new QLabel(tr("No definition for class '%1'.").arg(o->classname));
         warn->setObjectName("Warning");
         warn->setWordWrap(true);
         lay->addWidget(warn);

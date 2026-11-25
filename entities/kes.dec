@@ -83,6 +83,22 @@
 	input Toggle(void) : "Play if stopped, stop if playing."
 ]
 
+@PointClass base(Targetname, Angles) color(255 170 60) size(-8 -8 -8, 8 8 8)
+	= ParticleSystemEntity : "Particle system (.kfx), edited in Forge's Particle System tab. Local-space emitters follow the entity. Add User.<name> keys to set user parameters."
+[
+	System(particlesystem) : "System" : : "Particle system asset (.kfx)"
+	AutoActivate(boolean) : "Auto Activate" : 1 : "Start with the map."
+	Scale(float) : "Scale" : 1 : "Uniform scale of the system."
+
+	input Activate(void) : "Start spawning (keeps live particles)."
+	input Deactivate(void) : "Stop spawning; live particles finish."
+	input Toggle(void) : "Activate or deactivate."
+	input Restart(void) : "Clear and start again."
+	input Kill(void) : "Stop and remove every particle."
+	input SetUserParameter(string) : "Name and value, e.g. Heat 2."
+	output OnFinished(void) : "Every emitter finished and the last particle died."
+]
+
 @PointClass base(Targetname, EnableDisable, Kill) color(0 220 160) size(-8 -8 -8, 8 8 8)
 	= LogicRelayEntity : "Trigger fires OnTrigger, so one event can drive many links."
 [
