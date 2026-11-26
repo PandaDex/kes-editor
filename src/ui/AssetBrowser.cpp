@@ -394,10 +394,23 @@ AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget 
     m_zoom->setFixedWidth(110);
     m_zoom->setToolTip(tr("Tile size"));
     connect(m_zoom, &QSlider::valueChanged, this, &AssetBrowser::setThumbSize);
+    auto zoomButton = [this](const char *icon, int direction)
+    {
+        auto *b = new QToolButton(this);
+        b->setIcon(kes::style::icon(QString::fromLatin1(icon)));
+        b->setAutoRaise(true);
+        b->setStyleSheet(QStringLiteral("padding: 1px;"));
+        connect(b, &QToolButton::clicked, this, [this, direction]
+                { m_zoom->setValue(m_zoom->value() + direction * m_zoom->pageStep()); });
+        return b;
+    };
     auto *bottom = new QHBoxLayout;
     bottom->setContentsMargins(8, 3, 8, 3);
+    bottom->setSpacing(2);
     bottom->addWidget(m_count, 1);
+    bottom->addWidget(zoomButton("minus", -1));
     bottom->addWidget(m_zoom);
+    bottom->addWidget(zoomButton("plus", +1));
     auto *bottomBar = new QWidget(this);
     bottomBar->setObjectName("AssetBottomBar");
     bottomBar->setAttribute(Qt::WA_StyledBackground);

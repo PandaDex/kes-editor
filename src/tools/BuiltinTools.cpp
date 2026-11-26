@@ -2,6 +2,7 @@
 #include "core/EditorContext.h"
 #include "render/Batch.h"
 #include "render/Viewport.h"
+#include "ui/KesStyle.h"
 #include <QButtonGroup>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -807,7 +808,7 @@ void SelectTool::paintOverlay(Viewport *vp, QPainter &p)
         p.setBrush(QColor(17, 20, 27, 228));
         p.drawRoundedRect(toolbar, 6.0, 6.0);
 
-        const QString labels[] = {tr("M"), tr("S"), tr("R")};
+        const QString icons[] = {QStringLiteral("move"), QStringLiteral("scale"), QStringLiteral("rotate")};
         for (int i = 0; i < 3; ++i)
         {
             const bool active = int(m_gizmoMode) == i;
@@ -819,11 +820,9 @@ void SelectTool::paintOverlay(Viewport *vp, QPainter &p)
                        : hovered ? QColor(29, 34, 44, 235)
                                  : QColor(22, 26, 34, 215));
             p.drawRoundedRect(button, 3.0, 3.0);
-            p.setPen(active ? QColor(255, 226, 170) : QColor(223, 226, 232));
-            QFont buttonFont = p.font();
-            buttonFont.setBold(active);
-            p.setFont(buttonFont);
-            p.drawText(button, Qt::AlignCenter, labels[i]);
+            constexpr qreal iconSize = 18.0;
+            kes::style::paintIcon(p, QRectF(button.center() - QPointF(iconSize, iconSize) / 2, QSizeF(iconSize, iconSize)),
+                                  icons[i], active ? QColor(255, 226, 170) : QColor(223, 226, 232));
         }
         p.restore();
     }

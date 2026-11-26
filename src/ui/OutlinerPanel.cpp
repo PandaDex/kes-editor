@@ -6,7 +6,7 @@
 #include <QHash>
 #include <QInputDialog>
 #include <QLineEdit>
-#include <QPushButton>
+#include <QToolButton>
 #include <QTabWidget>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
@@ -56,12 +56,22 @@ OutlinerPanel::OutlinerPanel(EditorContext *ctx, QWidget *parent) : QWidget(pare
     layout->addWidget(m_filter);
 
     auto *buttons = new QHBoxLayout;
-    auto *groupButton = new QPushButton(tr("Group Selection..."), this);
-    auto *ungroupButton = new QPushButton(tr("Ungroup"), this);
-    auto *visgroupButton = new QPushButton(tr("Assign Visgroup..."), this);
+    auto iconButton = [this](const char *icon, const QString &tip)
+    {
+        auto *b = new QToolButton(this);
+        b->setIcon(kes::style::icon(QString::fromLatin1(icon)));
+        b->setToolTip(tip);
+        b->setAutoRaise(true);
+        return b;
+    };
+    auto *groupButton = iconButton("group", tr("Group Selection..."));
+    auto *ungroupButton = iconButton("ungroup", tr("Ungroup"));
+    auto *visgroupButton = iconButton("visgroup", tr("Assign Visgroup..."));
+    buttons->setSpacing(2);
     buttons->addWidget(groupButton);
     buttons->addWidget(ungroupButton);
     buttons->addWidget(visgroupButton);
+    buttons->addStretch();
     layout->addLayout(buttons);
 
     m_tabs = new QTabWidget(this);
@@ -71,8 +81,8 @@ OutlinerPanel::OutlinerPanel(EditorContext *ctx, QWidget *parent) : QWidget(pare
     m_tabs->addTab(m_visgroups, tr("Visgroups"));
     layout->addWidget(m_tabs);
 
-    connect(groupButton, &QPushButton::clicked, this, &OutlinerPanel::setSelectionGroup);
-    connect(ungroupButton, &QPushButton::clicked, this, [this]
+    connect(groupButton, &QToolButton::clicked, this, &OutlinerPanel::setSelectionGroup);
+    connect(ungroupButton, &QToolButton::clicked, this, [this]
             {
         QVector<MapObject> changed;
         for (ObjectId id : m_ctx->doc()->selection())
@@ -82,7 +92,7 @@ OutlinerPanel::OutlinerPanel(EditorContext *ctx, QWidget *parent) : QWidget(pare
                 changed.push_back(copy);
             }
         m_ctx->doc()->modify(changed, tr("Ungroup Objects")); });
-    connect(visgroupButton, &QPushButton::clicked, this, &OutlinerPanel::setSelectionVisgroup);
+    connect(visgroupButton, &QToolButton::clicked, this, &OutlinerPanel::setSelectionVisgroup);
     connect(m_filter, &QLineEdit::textChanged, this, [this] { rebuild(true); });
 
     connect(ctx->doc(), &MapDocument::objectsChanged, this, [this]

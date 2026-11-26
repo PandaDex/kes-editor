@@ -82,7 +82,7 @@ namespace nodegraph
             p->drawEllipse(QPointF(0, 0), 9, 9);
         }
         p->setPen(QPen(c.darker(150), 1.5));
-        p->setBrush(m_connected ? c : QColor("#11141b"));
+        p->setBrush(m_connected ? c : kes::style::base());
         p->drawEllipse(QPointF(0, 0), r, r);
         if (!m_connected)
         {
@@ -284,7 +284,7 @@ namespace nodegraph
         const qreal lod = QStyleOptionGraphicsItem::levelOfDetailFromTransform(p->worldTransform());
         const QRectF body(0, 0, m_width, m_height);
         const bool selected = opt->state & QStyle::State_Selected;
-        const QColor border = selected ? kes::style::accent() : QColor("#262b36");
+        const QColor border = selected ? kes::style::accent() : kes::style::border();
         const qreal bw = selected ? 2.4 : 1.2;
 
         if (lod < kLodSimple)
@@ -300,7 +300,7 @@ namespace nodegraph
             {
                 p->setPen(Qt::NoPen);
             }
-            p->setBrush(QColor("#161a22"));
+            p->setBrush(kes::style::panel());
             p->drawRect(body);
             p->setPen(Qt::NoPen);
             p->setBrush(m_titleFlat);
@@ -313,7 +313,7 @@ namespace nodegraph
         p->setBrush(QColor(0, 0, 0, 90));
         p->drawRoundedRect(body.translated(2.5, 3.5), 7, 7);
 
-        p->setBrush(QColor("#161a22"));
+        p->setBrush(kes::style::panel());
         p->drawPath(m_shape);
 
         p->setBrush(m_titleBrush);
@@ -370,7 +370,7 @@ namespace nodegraph
         if (!m_paramLines.isEmpty())
         {
             const qreal y0 = kTitleH + 6 + std::max<int>(1, int(std::max(m_inputs.size(), m_outputs.size()))) * kRowH + 2;
-            p->setPen(QColor("#262b36"));
+            p->setPen(kes::style::border());
             p->drawLine(QPointF(kPad, y0), QPointF(m_width - kPad, y0));
             p->setFont(m_font);
             for (int k = 0; k < m_paramLines.size(); ++k)

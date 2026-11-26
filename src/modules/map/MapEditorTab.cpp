@@ -201,13 +201,13 @@ void MapEditorTab::createActions()
         if (!b.valid()) for (const auto& kvp : m_ctx->doc()->objects()) b.expand(kvp.second.worldBounds());
         m_ctx->focusOn(b); });
 
-    m_snapAct = mk(tr("Snap to &Grid"), QKeySequence("Shift+W"));
+    m_snapAct = mk(tr("Snap to &Grid"), QKeySequence("Shift+W"), QStringLiteral("snap"));
     m_snapAct->setCheckable(true);
     m_snapAct->setChecked(m_ctx->snapEnabled());
     m_gridUpAct = mk(tr("&Larger Grid"), QKeySequence(Qt::Key_BracketRight));
     m_gridDownAct = mk(tr("&Smaller Grid"), QKeySequence(Qt::Key_BracketLeft));
     m_maxAct = mk(tr("&Maximize Active View"), QKeySequence("Shift+Z"));
-    m_perspectiveAct = mk(tr("3D Only"));
+    m_perspectiveAct = mk(tr("3D Only"), {}, QStringLiteral("view3d"));
     m_perspectiveAct->setCheckable(true);
     m_perspectiveAct->setToolTip(tr("Show the 3D perspective view by itself"));
     connect(m_snapAct, &QAction::toggled, m_ctx, &EditorContext::setSnapEnabled);

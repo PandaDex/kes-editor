@@ -1,3 +1,4 @@
+#include "ui/KesStyle.h"
 #include "framework/graph/NodeGraphView.h"
 
 #include "framework/graph/NodeGraphScene.h"
@@ -217,7 +218,7 @@ namespace nodegraph
         p->save();
         p->resetTransform();
         p->setRenderHint(QPainter::Antialiasing, false);
-        p->fillRect(dev, QColor(0x0e, 0x10, 0x16));
+        p->fillRect(dev, kes::style::base());
 
         constexpr int minor = 20, major = 100;
         auto drawGrid = [&](int step, const QColor& c, bool skipMajor)

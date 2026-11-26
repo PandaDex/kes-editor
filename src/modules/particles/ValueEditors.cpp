@@ -1,3 +1,4 @@
+#include "ui/KesStyle.h"
 #include "ValueEditors.h"
 
 #include <QCheckBox>
@@ -170,8 +171,8 @@ namespace kpe
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
         const QRectF r = plotRect();
-        p.fillRect(rect(), QColor(14, 16, 22));
-        p.fillRect(r, QColor(22, 26, 34));
+        p.fillRect(rect(), kes::style::base());
+        p.fillRect(r, kes::style::panel());
         float x1, y0, y1;
         range(x1, y0, y1);
         p.setPen(QColor(154, 160, 173));

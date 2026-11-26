@@ -8,36 +8,38 @@
 #include <QPixmap>
 #include <QPolygonF>
 #include <QRegularExpression>
+#include <QtMath>
+#include <cmath>
 #include <QStyleFactory>
 
 namespace kes::style {
 
 namespace {
 
-// Colours follow the KES website: near-black ground, cool blue greys, one amber accent.
+// Colours follow the KES website (cool blue greys, one amber accent), lifted off black so surfaces stay distinct.
 const QHash<QString, QString>& tokens()
 {
     static const QHash<QString, QString> t = {
         { "bg0", "#07080b" },      // separators, deepest frame
-        { "window", "#0b0d12" },   // window, menu bar, toolbars, dock titles
-        { "base", "#0e1016" },     // inputs, lists, text views
-        { "alt", "#11141b" },      // alternate rows
-        { "panel", "#11141b" },    // section headers, raised panels, cards
-        { "raised", "#161a22" },   // buttons, menus, popups
-        { "hover", "#1d222c" },
-        { "pressed", "#12151c" },
-        { "line", "#1c2029" },     // dividers
-        { "border", "#262b36" },   // control outlines
-        { "borderHover", "#3a4150" },
-        { "text", "#dfe2e8" },
+        { "window", "#1a1d24" },   // window, menu bar, toolbars, dock titles
+        { "base", "#111318" },     // inputs, lists, text views
+        { "alt", "#16191f" },      // alternate rows
+        { "panel", "#20242c" },    // section headers, raised panels, cards
+        { "raised", "#282d37" },   // buttons, menus, popups
+        { "hover", "#323844" },
+        { "pressed", "#1c2027" },
+        { "line", "#2d323d" },     // dividers
+        { "border", "#3b4250" },   // control outlines
+        { "borderHover", "#566072" },
+        { "text", "#e3e6ec" },
         { "bright", "#f4f5f7" },
-        { "muted", "#9aa0ad" },
-        { "dim", "#7a8090" },
-        { "disabled", "#4f5564" },
+        { "muted", "#adb3bf" },
+        { "dim", "#9197a5" },
+        { "disabled", "#5f6575" },
         { "accent", "#f5b54a" },
         { "accentStrong", "#8a6524" }, // text selection
-        { "accentDim", "#3a2f19" },    // selected rows
-        { "accentBg", "#2a2316" },     // checked tool buttons
+        { "accentDim", "#4d3c1d" },    // selected rows
+        { "accentBg", "#3b301b" },     // checked tool buttons
         { "accentText", "#ffd99a" },
         { "warning", "#f2c94c" },
         { "error", "#f26d6d" },
@@ -179,8 +181,160 @@ QTreeView#AssetTree { border: none; background: @window; }
 QTreeView#AssetTree::item { padding: 3px 2px; border-radius: 4px; }
 )";
 
+// Lucide icons (https://lucide.dev, ISC), copied verbatim on their 24 unit grid.
+// "rect x y w h rx" and "circle cx cy r" stand in for the matching SVG elements.
+const QHash<QString, QStringList>& lucideIcons()
+{
+    static const QHash<QString, QStringList> icons = {
+        { "group", { "M3 7V5c0-1.1.9-2 2-2h2", "M17 3h2c1.1 0 2 .9 2 2v2", "M21 17v2c0 1.1-.9 2-2 2h-2",
+                     "M7 21H5c-1.1 0-2-.9-2-2v-2", "rect 7 7 7 5 1", "rect 10 12 7 5 1" } },
+        { "ungroup", { "rect 11 14 10 7 2", "rect 3 3 10 7 2" } },
+        { "visgroup", { "M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 .83.18 2 2 0 0 0 .83-.18l8.58-3.9a1 1 0 0 0 0-1.831z",
+                        "M16 17h6", "M19 14v6", "M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 .825.178",
+                        "M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l2.116-.962" } },
+        { "move", { "M5 3v16h16", "m5 19 6-6", "m2 6 3-3 3 3", "m18 16 3 3-3 3" } },
+        { "scale", { "M5 7v11a1 1 0 0 0 1 1h11", "M5.293 18.707 11 13", "circle 19 19 2", "circle 5 5 2" } },
+        { "snap", { "m12 15 4 4", "m5 8 4 4",
+                    "M2.352 10.648a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.029-6.029a1 1 0 1 1 3 3l-6.029 6.029a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.365-6.367A1 1 0 0 0 8.716 4.282z" } },
+        { "view3d", { "M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z",
+                      "m3.3 7 8.7 5 8.7-5", "M12 22V12" } },
+        { "rotate", { "m15.194 13.707 3.814 1.86-1.86 3.814", "M16.47214 7.52786 A 5 10 0 1 0 13 21.79796",
+                      "M21.79796 11 A 10 5 0 1 0 19 15.57071" } },
+    };
+    return icons;
+}
+
+void arcTo(QPainterPath& path, QPointF from, qreal rx, qreal ry, qreal phiDeg, bool large, bool sweep, QPointF to)
+{
+    rx = std::abs(rx);
+    ry = std::abs(ry);
+    if (rx < 1e-9 || ry < 1e-9 || from == to)
+    {
+        path.lineTo(to);
+        return;
+    }
+    // Endpoint to centre parameterisation, SVG spec appendix B.2.4.
+    const qreal phi = qDegreesToRadians(phiDeg), cs = std::cos(phi), sn = std::sin(phi);
+    const qreal dx = (from.x() - to.x()) / 2, dy = (from.y() - to.y()) / 2;
+    const qreal x1 = cs * dx + sn * dy, y1 = -sn * dx + cs * dy;
+    const qreal lambda = x1 * x1 / (rx * rx) + y1 * y1 / (ry * ry);
+    if (lambda > 1)
+    {
+        rx *= std::sqrt(lambda);
+        ry *= std::sqrt(lambda);
+    }
+    const qreal num = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1;
+    const qreal den = rx * rx * y1 * y1 + ry * ry * x1 * x1;
+    const qreal coef = (large == sweep ? -1 : 1) * std::sqrt(std::max<qreal>(0, num / den));
+    const qreal cxp = coef * rx * y1 / ry, cyp = -coef * ry * x1 / rx;
+    const qreal cx = cs * cxp - sn * cyp + (from.x() + to.x()) / 2;
+    const qreal cy = sn * cxp + cs * cyp + (from.y() + to.y()) / 2;
+    const qreal t1 = std::atan2((y1 - cyp) / ry, (x1 - cxp) / rx);
+    qreal dt = std::atan2((-y1 - cyp) / ry, (-x1 - cxp) / rx) - t1;
+    if (!sweep && dt > 0) dt -= 2 * M_PI;
+    if (sweep && dt < 0) dt += 2 * M_PI;
+    const int steps = std::max(4, int(std::ceil(std::abs(dt) / (M_PI / 16))));
+    for (int i = 1; i <= steps; ++i)
+    {
+        const qreal t = t1 + dt * i / steps;
+        const qreal ux = rx * std::cos(t), uy = ry * std::sin(t);
+        path.lineTo(i == steps ? to : QPointF(cs * ux - sn * uy + cx, sn * ux + cs * uy + cy));
+    }
+}
+
+QPainterPath svgPath(const QString& d)
+{
+    static const QRegularExpression tokenRe(QStringLiteral("[A-Za-z]|[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?"));
+    QStringList tokens;
+    for (auto it = tokenRe.globalMatch(d); it.hasNext();) tokens << it.next().captured(0);
+
+    QPainterPath path;
+    QPointF cur, start, lastCtrl;
+    QChar cmd, prevCmd;
+    int i = 0;
+    auto num = [&] { return i < tokens.size() ? tokens[i++].toDouble() : 0.0; };
+    while (i < tokens.size())
+    {
+        if (tokens[i][0].isLetter()) cmd = tokens[i++][0];
+        else if (cmd == 'M') cmd = 'L';
+        else if (cmd == 'm') cmd = 'l';
+        const bool rel = cmd.isLower();
+        const QPointF base = rel ? cur : QPointF();
+        auto pt = [&] { const qreal x = num(); const qreal y = num(); return base + QPointF(x, y); };
+        switch (cmd.toUpper().unicode())
+        {
+        case 'M': cur = start = pt(); path.moveTo(cur); break;
+        case 'L': cur = pt(); path.lineTo(cur); break;
+        case 'H': cur.setX((rel ? cur.x() : 0) + num()); path.lineTo(cur); break;
+        case 'V': cur.setY((rel ? cur.y() : 0) + num()); path.lineTo(cur); break;
+        case 'C':
+        {
+            const QPointF c1 = pt(), c2 = pt(), e = pt();
+            path.cubicTo(c1, c2, e);
+            lastCtrl = c2;
+            cur = e;
+            break;
+        }
+        case 'S':
+        {
+            const bool smooth = QStringLiteral("CcSs").contains(prevCmd);
+            const QPointF c1 = smooth ? cur * 2 - lastCtrl : cur;
+            const QPointF c2 = pt(), e = pt();
+            path.cubicTo(c1, c2, e);
+            lastCtrl = c2;
+            cur = e;
+            break;
+        }
+        case 'Q':
+        {
+            const QPointF c = pt(), e = pt();
+            path.quadTo(c, e);
+            cur = e;
+            break;
+        }
+        case 'A':
+        {
+            const qreal rx = num(), ry = num(), rot = num();
+            const bool large = num() != 0, sweep = num() != 0;
+            const QPointF e = pt();
+            arcTo(path, cur, rx, ry, rot, large, sweep, e);
+            cur = e;
+            break;
+        }
+        case 'Z': path.closeSubpath(); cur = start; break;
+        default: ++i; break;
+        }
+        prevCmd = cmd;
+    }
+    return path;
+}
+
+bool drawLucide(QPainter& p, const QString& n)
+{
+    const auto it = lucideIcons().constFind(n);
+    if (it == lucideIcons().constEnd()) return false;
+    p.save();
+    p.scale(16.0 / 24.0, 16.0 / 24.0);
+    QPen pen = p.pen();
+    pen.setWidthF(pen.widthF() * 24.0 / 16.0);
+    p.setPen(pen);
+    for (const QString& part : *it)
+    {
+        const QStringList f = part.split(' ');
+        if (f[0] == "rect")
+            p.drawRoundedRect(QRectF(f[1].toDouble(), f[2].toDouble(), f[3].toDouble(), f[4].toDouble()), f[5].toDouble(), f[5].toDouble());
+        else if (f[0] == "circle")
+            p.drawEllipse(QPointF(f[1].toDouble(), f[2].toDouble()), f[3].toDouble(), f[3].toDouble());
+        else
+            p.drawPath(svgPath(part));
+    }
+    p.restore();
+    return true;
+}
+
 void drawGlyph(QPainter& p, const QString& n, const QColor& c)
 {
+    if (drawLucide(p, n)) return;
     auto line = [&](qreal x1, qreal y1, qreal x2, qreal y2) { p.drawLine(QPointF(x1, y1), QPointF(x2, y2)); };
     QColor ink = c;
     auto dot = [&](qreal x, qreal y, qreal r = 0.9) {
@@ -189,6 +343,7 @@ void drawGlyph(QPainter& p, const QString& n, const QColor& c)
     auto tint = [&](const QColor& col) { ink = col; QPen pen = p.pen(); pen.setColor(col); p.setPen(pen); };
 
     if (n == "plus")        { line(8, 3.5, 8, 12.5); line(3.5, 8, 12.5, 8); }
+    else if (n == "minus")  line(3.5, 8, 12.5, 8);
     else if (n == "trash")
     {
         line(3, 4.5, 13, 4.5);
@@ -370,6 +525,18 @@ QIcon icon(const QString& name)
     result.addPixmap(renderIcon(name, tok("disabled")), QIcon::Disabled);
     cache.insert(name, result);
     return result;
+}
+
+void paintIcon(QPainter& p, const QRectF& rect, const QString& name, const QColor& color)
+{
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing);
+    p.translate(rect.topLeft());
+    p.scale(rect.width() / 16.0, rect.height() / 16.0);
+    p.setPen(QPen(color, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.setBrush(Qt::NoBrush);
+    drawGlyph(p, name, color);
+    p.restore();
 }
 
 } // namespace kes::style

@@ -139,7 +139,7 @@ namespace kpe
         graphLayout->setSpacing(0);
         m_graphLabel = new QLabel;
         m_graphLabel->setContentsMargins(8, 4, 8, 4);
-        m_graphLabel->setStyleSheet("font-weight: 600; background: #11141b; border-bottom: 1px solid #1c2029;");
+        m_graphLabel->setStyleSheet(QStringLiteral("font-weight: 600; background: %1; border-bottom: 1px solid %2;").arg(kes::style::panel().name(), kes::style::border().name()));
         graphLayout->addWidget(m_graphLabel);
         m_graphStack = new QStackedWidget;
         auto* hint = new QLabel("No graph open.");
