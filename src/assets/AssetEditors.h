@@ -25,7 +25,7 @@ namespace AssetEditors
     OpenResult open(EditorContext *ctx, QWidget *parent, const QString &path);
 
     // Full path of a program named in the tables. Order: remembered location, absolute path,
-    // kToolSearchDirs (against the .kproject folder, then forge.exe), forge.exe's folder, PATH.
+    // kToolSearchDirs (against the .kproject folder, then the editor exe), the exe folder, PATH.
     // With `parent` set, asks the user to locate it when not found and remembers the answer.
     QString findProgram(EditorContext *ctx, const QString &name, QWidget *parent = nullptr);
 

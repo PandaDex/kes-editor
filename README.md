@@ -1,4 +1,4 @@
-# Forge
+# KES Editor
 
 Map editor for KES. Brush geometry, entities, materials, and the place you import and open
 the rest of the project's assets from. Builds `.fmapc` maps the engine loads.
@@ -24,19 +24,19 @@ cmake --build build
 
 `entities/` and `content/` get copied next to the exe on every build.
 
-Import needs the engine's `model-importer` target built too. Forge finds it in the engine's
+Import needs the engine's `model-importer` target built too. The KES Editor finds it in the engine's
 build folder.
 
 ## Getting started
 
-On first start Forge asks for the game's `.kproject` (here `game/kes.kproject`). It remembers
+On first start the KES Editor asks for the game's `.kproject` (here `game/kes.kproject`). It remembers
 it; change it with File > Open Project. Everything is relative to the project's `AssetRoot`
 (`content/`): maps in `maps/`, materials in `materials/`, textures in `textures/`.
 
 Save the map into `content/maps/` and press F9 to build the `.fmapc` next to it. Without the UI:
 
 ```
-forge --compile in.fmap out.fmapc
+kes-editor --compile in.fmap out.fmapc
 ```
 
 This uses the nearest `.kproject` above the map.
@@ -64,7 +64,7 @@ Esc cancels a drag.
 - Material tool: click a face to apply the current material, Shift+click for the whole object,
   Alt+click to pick, Ctrl+click to select faces. Tool Options edit scale, offset and rotation.
 
-The map autosaves every 3 minutes to `<user data>/Forge/autosave/` without touching your file.
+The map autosaves every 3 minutes to `<user data>/KES Editor/autosave/` without touching your file.
 
 ## Assets
 
@@ -72,7 +72,7 @@ The Asset Browser shows the content folder.
 
 - Double-click opens an asset in its editor. Maps, materials (`.mat`), shader graphs
   (`.slangnodes`), models (`.kmodel`), animation graphs (`.ag`), input maps (`.imap`) and `.po`
-  files open in a Forge tab; UI and shader files in VS Code (with the game folder as workspace),
+  files open in an editor tab; UI and shader files in VS Code (with the game folder as workspace),
   images and sounds in the system default app.
 - Drag a material onto a face, an object, or a material field in Properties. Click one to make it
   the current material, which new blocks use.
@@ -81,7 +81,7 @@ The Asset Browser shows the content folder.
   `<model>_<clip>.kanim` next to the model. If the browser has a subfolder open, imports go there.
 - New creates a material, UI panel, menu, HUD, stylesheet or an empty map.
 
-Extensions an editor module claims (`src/modules/BuiltinModules.cpp`) always open in Forge. To
+Extensions an editor module claims (`src/modules/BuiltinModules.cpp`) always open in the editor. To
 change which program opens any other type, edit `kAssetEditors` in `src/assets/AssetTypeMap.cpp`:
 
 ```cpp
@@ -89,15 +89,15 @@ change which program opens any other type, edit `kAssetEditors` in `src/assets/A
 { "png", "@system" },
 ```
 
-`@forge` opens in Forge, `@system` uses the OS default, `a|b` takes the first program found.
+`@forge` opens in the KES Editor, `@system` uses the OS default, `a|b` takes the first program found.
 `{file}`, `{root}`, `{content}` and `{project}` are filled in; the file goes last if `{file}` isn't
-used. If a program can't be found Forge asks for it once. Templates for New are in
+used. If a program can't be found the KES Editor asks for it once. Templates for New are in
 `src/assets/AssetTemplates.cpp`.
 
 ## Entities
 
 Entity classes come from `.dec` files in `entities/` (next to the exe),
-`<user data>/Forge/entities/` and the project's folders: `EntityDefPaths` in the `.kproject`
+`<user data>/KES Editor/entities/` and the project's folders: `EntityDefPaths` in the `.kproject`
 (`;`-separated, relative to it), `editor/` next to the `.kproject` by default. Project classes
 load last and override the others. They reload when saved. `kes.dec` has the engine's classes;
 `base.dec` explains the syntax. Tools > New Entity Class writes a class to `user.dec` from a form.

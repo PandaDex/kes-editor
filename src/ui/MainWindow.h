@@ -23,6 +23,8 @@ public:
 
     // Opens the file in the editor module that handles its extension.
     bool openFile(const QString& path);
+    // Opens a read-only preview tab (EditorModule::previewExtensions).
+    bool previewFile(const QString& path);
 
 protected:
     void closeEvent(QCloseEvent*) override;

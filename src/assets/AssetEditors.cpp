@@ -112,7 +112,7 @@ namespace AssetEditors
         if (alts.isEmpty())
             return {};
         if (alts.first() == "@forge")
-            return QStringLiteral("Forge");
+            return QStringLiteral("KES Editor");
         if (alts.first() == "@system")
             return QCoreApplication::translate("AssetEditors", "default app");
         const QStringList parts = QProcess::splitCommand(alts.first());
@@ -152,7 +152,7 @@ namespace AssetEditors
         if (!parent)
             return {};
         const auto answer = QMessageBox::question(parent, QObject::tr("Program not found"),
-                                                  QObject::tr("Forge could not find \"%1\".\n\nLocate it now? Forge remembers the choice.").arg(name));
+                                                  QObject::tr("KES Editor could not find \"%1\".\n\nLocate it now? The choice is remembered.").arg(name));
         if (answer != QMessageBox::Yes)
             return {};
 #ifdef Q_OS_WIN

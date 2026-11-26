@@ -25,7 +25,7 @@
 
 namespace
 {
-    const QColor kOrange(255, 150, 30);
+    const QColor kOrange(245, 181, 74); // kes::style accent
     const QColor kAxisColors[3] = {QColor(235, 70, 70), QColor(80, 210, 80), QColor(80, 130, 245)};
     const QVector3D kAxisDirs[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
     constexpr float kPi = 3.14159265358979f;
@@ -80,10 +80,10 @@ namespace
         p.setRenderHint(QPainter::Antialiasing);
         const QFontMetrics fm(p.font());
         const QRectF r(at.x(), at.y(), fm.horizontalAdvance(text) + 12, fm.height() + 6);
-        p.setPen(QPen(QColor(255, 150, 30, 160), 1));
-        p.setBrush(QColor(20, 21, 24, 215));
+        p.setPen(QPen(QColor(245, 181, 74, 170), 1));
+        p.setBrush(QColor(11, 13, 18, 215));
         p.drawRoundedRect(r, 4, 4);
-        p.setPen(QColor(240, 240, 240));
+        p.setPen(QColor(244, 245, 247));
         p.drawText(r, Qt::AlignCenter, text);
         p.restore();
     }
@@ -803,8 +803,8 @@ void SelectTool::paintOverlay(Viewport *vp, QPainter &p)
                                       first.height() + 8.0);
         p.save();
         p.setRenderHint(QPainter::Antialiasing);
-        p.setPen(QPen(QColor(110, 115, 125, 220), 1.0));
-        p.setBrush(QColor(28, 30, 35, 225));
+        p.setPen(QPen(QColor(58, 65, 80, 220), 1.0));
+        p.setBrush(QColor(17, 20, 27, 228));
         p.drawRoundedRect(toolbar, 6.0, 6.0);
 
         const QString labels[] = {tr("M"), tr("S"), tr("R")};
@@ -813,13 +813,13 @@ void SelectTool::paintOverlay(Viewport *vp, QPainter &p)
             const bool active = int(m_gizmoMode) == i;
             const bool hovered = m_gizmoHover == i;
             const QRectF button = gizmoToolbarButtonRect(vp, i);
-            p.setPen(active ? QPen(QColor(255, 190, 105), 1.0)
-                            : QPen(QColor(95, 100, 110, hovered ? 230 : 150), 1.0));
-            p.setBrush(active    ? QColor(130, 72, 28, 235)
-                       : hovered ? QColor(70, 74, 82, 235)
-                                 : QColor(45, 48, 55, 210));
+            p.setPen(active ? QPen(QColor(245, 181, 74), 1.0)
+                            : QPen(QColor(58, 65, 80, hovered ? 230 : 150), 1.0));
+            p.setBrush(active    ? QColor(70, 54, 24, 235)
+                       : hovered ? QColor(29, 34, 44, 235)
+                                 : QColor(22, 26, 34, 215));
             p.drawRoundedRect(button, 3.0, 3.0);
-            p.setPen(active ? QColor(255, 242, 225) : QColor(220, 222, 228));
+            p.setPen(active ? QColor(255, 226, 170) : QColor(223, 226, 232));
             QFont buttonFont = p.font();
             buttonFont.setBold(active);
             p.setFont(buttonFont);

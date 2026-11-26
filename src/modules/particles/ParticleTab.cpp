@@ -68,7 +68,8 @@ namespace kpe
                 a->setShortcut(ks);
             if (!icon.isEmpty())
                 a->setIcon(kes::style::icon(icon));
-            QObject::connect(a, &QAction::triggered, parent, std::move(slot));
+            if (slot)
+                QObject::connect(a, &QAction::triggered, parent, std::move(slot));
             return a;
         }
 
@@ -96,7 +97,7 @@ namespace kpe
         {
             auto* l = new QLabel(text);
             l->setWordWrap(true);
-            l->setStyleSheet("color: #8c8c94;");
+            l->setObjectName("Muted");
             return l;
         }
 
@@ -138,13 +139,13 @@ namespace kpe
         graphLayout->setSpacing(0);
         m_graphLabel = new QLabel;
         m_graphLabel->setContentsMargins(8, 4, 8, 4);
-        m_graphLabel->setStyleSheet("font-weight: 600; background: #24242a;");
+        m_graphLabel->setStyleSheet("font-weight: 600; background: #11141b; border-bottom: 1px solid #1c2029;");
         graphLayout->addWidget(m_graphLabel);
         m_graphStack = new QStackedWidget;
         auto* hint = new QLabel("No graph open.");
         hint->setAlignment(Qt::AlignCenter);
         hint->setWordWrap(true);
-        hint->setStyleSheet("color: #8c8c94;");
+        hint->setObjectName("EmptyState");
         m_graphStack->addWidget(hint);
         graphLayout->addWidget(m_graphStack, 1);
         auto* graphSplit = new QSplitter(Qt::Horizontal);

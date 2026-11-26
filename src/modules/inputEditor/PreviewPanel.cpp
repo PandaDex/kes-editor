@@ -127,7 +127,7 @@ namespace imap
                 QTextEdit::ExtraSelection sel;
                 sel.cursor = QTextCursor(b);
                 sel.cursor.setPosition(last.position() + last.length() - 1, QTextCursor::KeepAnchor);
-                sel.format.setBackground(QColor(0x3a, 0x2c, 0x20));
+                sel.format.setBackground(QColor(0x3a, 0x2f, 0x19));
                 sel.format.setProperty(QTextFormat::FullWidthSelection, true);
                 selections.push_back(sel);
 

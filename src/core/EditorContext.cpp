@@ -105,7 +105,14 @@ bool EditorContext::loadProject(const QString &kprojectPath, QString *error, boo
     if (m_registry->setProjectPaths(project.entityDefDirs))
         m_registry->reloadAll();
     if (remember)
-        QSettings().setValue("project", project.filePath);
+    {
+        QSettings settings;
+        settings.setValue("project", project.filePath);
+        QStringList recent = settings.value("recentProjects").toStringList();
+        recent.removeAll(project.filePath);
+        recent.prepend(project.filePath);
+        settings.setValue("recentProjects", recent.mid(0, 8));
+    }
     emit projectDirChanged();
     emit projectChanged();
     return true;

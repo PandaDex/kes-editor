@@ -803,7 +803,7 @@ void ModelViewport::buildOverlayLines()
 
 void ModelViewport::paintGL()
 {
-    glClearColor(0.133f, 0.133f, 0.149f, 1.0f);
+    glClearColor(0.086f, 0.102f, 0.133f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     if (!m_doc->isOpen()) {
         QPainter p(this);

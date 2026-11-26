@@ -26,14 +26,49 @@ add_library(forge_engine STATIC
 target_include_directories(forge_engine PUBLIC ${KES_ENGINE_DIR})
 target_compile_definitions(forge_engine PUBLIC KES_PROFILING=0 _CRT_SECURE_NO_WARNINGS NOMINMAX)
 
+# RmlUi + FreeType for the .rml preview, the same submodules and options as cmake/KesUi.cmake,
+# always static here.
+get_filename_component(KES_ROOT_DIR "${KES_ENGINE_DIR}/.." ABSOLUTE)
+if(NOT TARGET rmlui_core)
+    foreach(_forge_ui_dep IN ITEMS RmlUi freetype)
+        if(NOT EXISTS "${KES_ROOT_DIR}/external/${_forge_ui_dep}/CMakeLists.txt")
+            message(FATAL_ERROR "Forge: ${KES_ROOT_DIR}/external/${_forge_ui_dep} missing; git submodule update --init external/RmlUi external/freetype")
+        endif()
+    endforeach()
+    set(_forge_saved_shared "${BUILD_SHARED_LIBS}")
+    set(BUILD_SHARED_LIBS OFF)
+    set(FT_DISABLE_ZLIB ON)
+    set(FT_DISABLE_BZIP2 ON)
+    set(FT_DISABLE_PNG ON)
+    set(FT_DISABLE_HARFBUZZ ON)
+    set(FT_DISABLE_BROTLI ON)
+    set(SKIP_INSTALL_ALL ON)
+    add_subdirectory("${KES_ROOT_DIR}/external/freetype" "${CMAKE_BINARY_DIR}/external/freetype" EXCLUDE_FROM_ALL)
+    if(NOT TARGET Freetype::Freetype)
+        add_library(Freetype::Freetype ALIAS freetype)
+    endif()
+    set(CMAKE_DISABLE_FIND_PACKAGE_Freetype ON)
+    set(RMLUI_FONT_ENGINE "freetype")
+    set(RMLUI_SAMPLES OFF)
+    set(RMLUI_LUA_BINDINGS OFF)
+    set(RMLUI_SVG_PLUGIN OFF)
+    set(RMLUI_LOTTIE_PLUGIN OFF)
+    set(RMLUI_TRACY_PROFILING OFF)
+    set(RMLUI_WARNINGS_AS_ERRORS OFF)
+    add_subdirectory("${KES_ROOT_DIR}/external/RmlUi" "${CMAKE_BINARY_DIR}/external/RmlUi" EXCLUDE_FROM_ALL)
+    unset(CMAKE_DISABLE_FIND_PACKAGE_Freetype)
+    set(BUILD_SHARED_LIBS "${_forge_saved_shared}")
+endif()
+
 # Everything but main(): the editor shell, the framework (src/framework) and the editor
 # modules (src/modules). Tests link it too.
 file(GLOB_RECURSE FORGE_SOURCES CONFIGURE_DEPENDS src/*.cpp src/*.h)
 list(REMOVE_ITEM FORGE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
 add_library(forge_core STATIC ${FORGE_SOURCES})
 target_include_directories(forge_core PUBLIC src)
-target_link_libraries(forge_core PUBLIC forge_engine Qt6::Core Qt6::Gui Qt6::Widgets Qt6::OpenGL Qt6::OpenGLWidgets)
-target_compile_definitions(forge_core PUBLIC FORGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(forge_core PUBLIC forge_engine Qt6::Core Qt6::Gui Qt6::Widgets Qt6::OpenGL Qt6::OpenGLWidgets RmlUi::Core)
+target_compile_definitions(forge_core PUBLIC FORGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    KES_ENGINE_ASSETS_DIR="${KES_ENGINE_DIR}/assets" FORGE_VERSION="${PROJECT_VERSION}")
 
 if(WIN32)
     add_executable(forge WIN32 src/main.cpp ./resource/app.rc)
@@ -41,6 +76,13 @@ else()
     add_executable(forge src/main.cpp)
 endif()
 target_link_libraries(forge PRIVATE forge_core)
+set_target_properties(forge PROPERTIES OUTPUT_NAME "kes-editor")
+
+qt_add_resources(forge "forge_brand"
+    PREFIX "/brand"
+    BASE resource/brand
+    FILES resource/brand/icon-light.png resource/brand/logo-light.png
+)
 
 # Available as :/preview/kes_common.slang
 qt_add_resources(forge "shadergraph_preview"
@@ -56,10 +98,12 @@ if(MSVC)
 endif()
 
 add_custom_command(TARGET forge POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/entities $<TARGET_FILE_DIR:forge>/entities)
+# Engine UI assets (/engine/ui/...) for the .rml preview when Forge runs away from the source tree
+add_custom_command(TARGET forge POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${KES_ENGINE_DIR}/assets/engine/ui $<TARGET_FILE_DIR:forge>/engine-assets/engine/ui)
 
 include(CTest)
 if(BUILD_TESTING)
-    foreach(test shadergraph_test modeleditor_test localization_test project_test particles_test)
+    foreach(test shadergraph_test modeleditor_test localization_test project_test particles_test rmlpreview_test particleview_test assetbrowser_test)
         add_executable(forge_${test} tests/${test}.cpp)
         target_link_libraries(forge_${test} PRIVATE forge_core)
         if(MSVC)

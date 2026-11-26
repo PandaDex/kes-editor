@@ -6,15 +6,48 @@
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QTextStream>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QSurfaceFormat>
+
+// The editor was called Forge; carry its settings (project, recent files, layouts) and its user
+// data folder (user.dec entities, autosaves) over once. The old copies are left in place.
+static void migrateSettings()
+{
+    QSettings current;
+    if (current.allKeys().isEmpty())
+    {
+        const QSettings old(QStringLiteral("kes"), QStringLiteral("Forge"));
+        for (const QString& key : old.allKeys())
+            current.setValue(key, old.value(key));
+    }
+
+    const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    const QString oldDir = QFileInfo(dataDir).absolutePath() + QStringLiteral("/Forge");
+    if (QFileInfo::exists(dataDir) || !QFileInfo(oldDir).isDir())
+        return;
+    QDirIterator it(oldDir, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
+    while (it.hasNext())
+    {
+        const QString source = it.next();
+        const QString target = dataDir + QLatin1Char('/') + QDir(oldDir).relativeFilePath(source);
+        QDir().mkpath(QFileInfo(target).absolutePath());
+        QFile::copy(source, target);
+    }
+    QDir().mkpath(dataDir);
+}
 
 int main(int argc, char** argv)
 {
     if (argc == 4 && QString::fromLocal8Bit(argv[1]) == "--compile")
     {
         QCoreApplication app(argc, argv);
-        QCoreApplication::setApplicationName("Forge");
+        QCoreApplication::setApplicationName("KES Editor");
         QCoreApplication::setOrganizationName("kes");
+        migrateSettings();
 
         EditorContext context;
         QString error;
@@ -55,8 +88,9 @@ int main(int argc, char** argv)
     QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
 
     QApplication app(argc, argv);
-    QApplication::setApplicationName("Forge");
+    QApplication::setApplicationName("KES Editor");
     QApplication::setOrganizationName("kes");
+    migrateSettings();
     kes::style::apply(app);
 
     MainWindow w;

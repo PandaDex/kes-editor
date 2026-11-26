@@ -170,11 +170,11 @@ namespace kpe
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
         const QRectF r = plotRect();
-        p.fillRect(rect(), QColor(30, 30, 34));
-        p.fillRect(r, QColor(40, 40, 46));
+        p.fillRect(rect(), QColor(14, 16, 22));
+        p.fillRect(r, QColor(22, 26, 34));
         float x1, y0, y1;
         range(x1, y0, y1);
-        p.setPen(QColor(150, 150, 156));
+        p.setPen(QColor(154, 160, 173));
         QFont f = font();
         f.setPointSizeF(f.pointSizeF() * 0.8);
         p.setFont(f);
@@ -183,7 +183,7 @@ namespace kpe
         p.drawText(QRectF(r.right() - 40, r.bottom() + 2, 40, 12), Qt::AlignRight, QString::number(x1, 'g', 3));
         if (y0 < 0.0f && y1 > 0.0f)
         {
-            p.setPen(QColor(70, 70, 78));
+            p.setPen(QColor(58, 65, 80));
             const double zy = toScreen({ 0.0f, 0.0f }).y();
             p.drawLine(QPointF(r.left(), zy), QPointF(r.right(), zy));
         }
@@ -204,7 +204,7 @@ namespace kpe
         p.setPen(Qt::NoPen);
         for (int i = 0; i < int(m_keys.size()); ++i)
         {
-            p.setBrush(i == m_drag ? QColor(255, 210, 90) : QColor(230, 230, 236));
+            p.setBrush(i == m_drag ? QColor(245, 181, 74) : QColor(244, 245, 247));
             p.drawEllipse(toScreen(m_keys[size_t(i)]), 4.0, 4.0);
         }
     }

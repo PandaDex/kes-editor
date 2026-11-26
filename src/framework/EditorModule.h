@@ -18,6 +18,8 @@ public:
     // lowercase, without the dot
     virtual QStringList extensions() const = 0;
     virtual QString fileFilter() const;
+    // Files this module shows read-only, from the Asset Browser's Preview action.
+    virtual QStringList previewExtensions() const { return {}; }
 
     // Non-empty adds File > New > <label>, which opens an untitled tab.
     virtual QString newLabel() const { return {}; }
@@ -38,6 +40,7 @@ public:
 
     const EditorModule* module(const QString& id) const;
     const EditorModule* moduleFor(const QString& path) const;
+    const EditorModule* previewModuleFor(const QString& path) const;
     std::vector<const EditorModule*> modules() const;
     // "All supported (...);;<module filters>"
     QString openFilter() const;

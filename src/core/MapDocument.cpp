@@ -503,7 +503,7 @@ bool MapDocument::load(const QString &path, QString *error)
     if (doc.isNull() || doc.object()["format"].toString() != "forge-map")
     {
         if (error)
-            *error = pe.error != QJsonParseError::NoError ? pe.errorString() : tr("Not a Forge map file");
+            *error = pe.error != QJsonParseError::NoError ? pe.errorString() : tr("Not a KES map file");
         return false;
     }
     const QJsonObject root = doc.object();

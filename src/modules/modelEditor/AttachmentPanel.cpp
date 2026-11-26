@@ -314,7 +314,7 @@ namespace kme
             h->setContentsMargins(0, 0, 0, 0);
             auto* name = new QLineEdit;
             name->setFixedWidth(110);
-            name->setToolTip("Slot name. Forge overrides a slot with an entity key Material.<name>, so renaming "
+            name->setToolTip("Slot name. The map editor overrides a slot with an entity key Material.<name>, so renaming "
                              "drops those overrides.");
             auto* path = new PathEdit(m_preview, "Slot Material", "Materials (*.mat)");
             path->setPlaceholder("(Material / default)");

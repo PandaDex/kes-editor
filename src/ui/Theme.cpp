@@ -17,7 +17,7 @@ namespace Theme
             pm.fill(Qt::transparent);
             QPainter p(&pm);
             p.setRenderHint(QPainter::Antialiasing);
-            const QColor c = state ? kes::style::accent() : QColor(210, 210, 215);
+            const QColor c = state ? kes::style::accent() : kes::style::text();
             p.setPen(QPen(c, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
             p.setBrush(Qt::NoBrush);
             if (id == "select")

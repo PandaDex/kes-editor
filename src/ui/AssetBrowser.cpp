@@ -1,4 +1,7 @@
 #include "ui/AssetBrowser.h"
+#include "ui/AssetPathBar.h"
+#include "ui/AssetTiles.h"
+#include "ui/FolderColors.h"
 #include "ui/KesStyle.h"
 #include "assets/AssetEditors.h"
 #include "assets/AssetFileOps.h"
@@ -6,7 +9,9 @@
 #include "assets/AssetTemplates.h"
 #include "core/EditorContext.h"
 #include "tools/MaterialTool.h"
+#include <QColorDialog>
 #include <QDateTime>
+#include <QMouseEvent>
 #include <QDesktopServices>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -24,7 +29,9 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QPainter>
+#include <QSettings>
 #include <QShortcut>
+#include <QSlider>
 #include <QSortFilterProxyModel>
 #include <QSplitter>
 #include <QToolButton>
@@ -34,7 +41,8 @@
 
 namespace
 {
-    constexpr int kThumb = 64;
+    constexpr int kThumbMin = 48;
+    constexpr int kThumbMax = 160;
 
     bool isCompiledAsset(const QFileInfo &info)
     {
@@ -44,10 +52,11 @@ namespace
 
     QIcon materialThumbnail(const MaterialInfo &info)
     {
-        QPixmap pixmap(kThumb, kThumb);
+        constexpr int size = 128;
+        QPixmap pixmap(size, size);
         if (!info.texture.isNull())
         {
-            QImage image = info.texture.scaled(kThumb, kThumb, Qt::IgnoreAspectRatio, Qt::FastTransformation)
+            QImage image = info.texture.scaled(size, size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
                                .convertToFormat(QImage::Format_ARGB32);
             QPainter p(&image);
             p.setCompositionMode(QPainter::CompositionMode_Multiply);
@@ -59,85 +68,53 @@ namespace
         {
             pixmap.fill(info.color);
         }
-        QPainter p(&pixmap);
-        p.setPen(QColor(0, 0, 0, 120));
-        p.drawRect(0, 0, kThumb - 1, kThumb - 1);
         return QIcon(pixmap);
     }
 
-    QColor typeColor(const QString &suffix)
-    {
-        static const QHash<QString, QColor> colors = {
-            {"fmap", QColor(200, 70, 60)},
-            {"kmodel", QColor(70, 130, 210)}, {"fbx", QColor(70, 130, 210)}, {"gltf", QColor(70, 130, 210)},
-            {"glb", QColor(70, 130, 210)}, {"obj", QColor(70, 130, 210)},
-            {"kanim", QColor(150, 90, 200)},
-            {"ktex", QColor(70, 160, 90)}, {"png", QColor(70, 160, 90)}, {"jpg", QColor(70, 160, 90)},
-            {"jpeg", QColor(70, 160, 90)}, {"bmp", QColor(70, 160, 90)}, {"tif", QColor(70, 160, 90)},
-            {"tiff", QColor(70, 160, 90)},
-            {"ksound", QColor(220, 140, 50)}, {"wav", QColor(220, 140, 50)}, {"mp3", QColor(220, 140, 50)},
-            {"ogg", QColor(220, 140, 50)},
-            {"rml", QColor(50, 160, 170)}, {"rcss", QColor(50, 160, 170)},
-            {"po", QColor(190, 90, 140)},
-            {"slangnodes", QColor(200, 170, 50)}, {"slang", QColor(200, 170, 50)}, {"shader", QColor(200, 170, 50)},
-        };
-        return colors.value(suffix, QColor(100, 100, 110));
-    }
-
+    // Drag pixmaps and other places that only take the decoration.
     QIcon typeIcon(const QString &suffix)
     {
         static QHash<QString, QIcon> cache;
         auto cached = cache.constFind(suffix);
         if (cached != cache.cend())
             return cached.value();
-        QPixmap pixmap(kThumb, kThumb);
+        constexpr int size = 64;
+        QPixmap pixmap(size, size);
         pixmap.fill(Qt::transparent);
         QPainter p(&pixmap);
         p.setRenderHint(QPainter::Antialiasing);
         p.setPen(Qt::NoPen);
-        p.setBrush(typeColor(suffix).darker(160));
-        p.drawRoundedRect(QRectF(6, 4, kThumb - 12, kThumb - 8), 6, 6);
-        p.setBrush(typeColor(suffix));
-        p.drawRoundedRect(QRectF(6, kThumb - 24, kThumb - 12, 20), 4, 4);
+        p.setBrush(QColor(0x0b, 0x0d, 0x12));
+        p.drawRoundedRect(QRectF(4, 4, size - 8, size - 8), 6, 6);
+        p.setBrush(AssetTypes::color(suffix));
+        p.drawRect(QRectF(4, size - 8, size - 8, 3));
         QFont font = p.font();
         font.setBold(true);
-        font.setPixelSize(suffix.size() > 5 ? 9 : 12);
+        font.setPixelSize(suffix.size() > 4 ? 10 : 13);
         p.setFont(font);
-        p.setPen(Qt::white);
-        p.drawText(QRectF(6, kThumb - 24, kThumb - 12, 20), Qt::AlignCenter, suffix.toUpper());
+        p.setPen(AssetTypes::color(suffix));
+        p.drawText(QRectF(4, 4, size - 8, size - 12), Qt::AlignCenter, suffix.toUpper());
         p.end();
         return cache.insert(suffix, QIcon(pixmap)).value();
     }
-
-    QIcon folderIcon()
-    {
-        static const QIcon icon = []
-        {
-            QPixmap pixmap(kThumb, kThumb);
-            pixmap.fill(Qt::transparent);
-            QPainter p(&pixmap);
-            p.setRenderHint(QPainter::Antialiasing);
-            p.setPen(Qt::NoPen);
-            p.setBrush(QColor(170, 135, 60));
-            p.drawRoundedRect(QRectF(6, 12, 24, 12), 3, 3);
-            p.drawRoundedRect(QRectF(6, 16, kThumb - 12, kThumb - 28), 4, 4);
-            p.setBrush(QColor(215, 175, 85));
-            p.drawRoundedRect(QRectF(6, 22, kThumb - 12, kThumb - 34), 4, 4);
-            p.end();
-            return QIcon(pixmap);
-        }();
-        return icon;
-    }
 }
 
-// Thumbnails are made here, on the GUI thread; a QFileSystemModel icon provider runs on a worker thread.
+// Thumbnails are made here, on the GUI thread (textures on the thread pool); a QFileSystemModel
+// icon provider would run on a worker thread.
 class AssetFilterModel : public QSortFilterProxyModel
 {
 public:
-    AssetFilterModel(EditorContext *ctx, QFileSystemModel *files, QObject *parent)
-        : QSortFilterProxyModel(parent), m_ctx(ctx), m_files(files)
+    AssetFilterModel(EditorContext *ctx, QFileSystemModel *files, FolderColors *colors, ThumbnailCache *thumbs, QObject *parent)
+        : QSortFilterProxyModel(parent), m_ctx(ctx), m_files(files), m_colors(colors), m_thumbs(thumbs)
     {
         setSourceModel(files);
+        QObject::connect(thumbs, &ThumbnailCache::ready, this, [this](const QString &path)
+                         {
+            const QModelIndex index = mapFromSource(m_files->index(path));
+            if (index.isValid())
+                emit dataChanged(index, index, {Qt::DecorationRole, AssetRoles::Preview}); });
+        QObject::connect(colors, &FolderColors::changed, this, [this]
+                         { refreshAll(); });
     }
 
     QString materialPath(const QModelIndex &index) const
@@ -152,38 +129,47 @@ public:
         return relative.startsWith("../") ? QString() : relative;
     }
 
-    void clearThumbnails(const QModelIndex &parent)
+    void clearThumbnails()
     {
         m_thumbnails.clear();
+        refreshAll();
+    }
+
+    void refreshAll()
+    {
+        const QModelIndex parent = mapFromSource(m_files->index(m_files->rootPath()));
         const int rows = rowCount(parent);
         if (rows > 0)
-            emit dataChanged(index(0, 0, parent), index(rows - 1, 0, parent), {Qt::DecorationRole});
+            emit dataChanged(index(0, 0, parent), index(rows - 1, 0, parent));
     }
 
     QVariant data(const QModelIndex &index, int role) const override
     {
-        if (role == Qt::DecorationRole && index.column() == 0)
+        if (index.column() != 0)
+            return QSortFilterProxyModel::data(index, role);
+        switch (role)
         {
-            const QString material = materialPath(index);
-            if (!material.isEmpty())
-            {
-                auto cached = m_thumbnails.constFind(material);
-                if (cached != m_thumbnails.cend())
-                    return cached.value();
-                if (const MaterialInfo *info = m_ctx->materials()->find(material))
-                {
-                    const QIcon icon = materialThumbnail(*info);
-                    m_thumbnails.insert(material, icon);
-                    return icon;
-                }
-            }
+        case AssetRoles::IsFolder:
+            return m_files->isDir(mapToSource(index));
+        case AssetRoles::FolderColor:
+            return m_colors->color(m_files->filePath(mapToSource(index)));
+        case AssetRoles::Suffix:
+            return m_files->fileInfo(mapToSource(index)).suffix().toLower();
+        case AssetRoles::Preview:
+            return QVariant::fromValue(preview(index));
+        case Qt::DecorationRole:
+        {
             const QFileInfo info = m_files->fileInfo(mapToSource(index));
             if (info.isDir())
-                return folderIcon();
-            if (info.isFile())
-                return typeIcon(info.suffix().toLower());
+                return FolderColors::icon(m_colors->color(info.absoluteFilePath()), 64);
+            const QIcon icon = preview(index);
+            return icon.isNull() ? typeIcon(info.suffix().toLower()) : icon;
         }
-        return QSortFilterProxyModel::data(index, role);
+        case Qt::ToolTipRole:
+            return QDir::toNativeSeparators(m_files->filePath(mapToSource(index)));
+        default:
+            return QSortFilterProxyModel::data(index, role);
+        }
     }
 
     Qt::DropActions supportedDragActions() const override { return Qt::CopyAction; }
@@ -197,8 +183,32 @@ protected:
     }
 
 private:
+    QIcon preview(const QModelIndex &index) const
+    {
+        const QString material = materialPath(index);
+        if (!material.isEmpty())
+        {
+            auto cached = m_thumbnails.constFind(material);
+            if (cached != m_thumbnails.cend())
+                return cached.value();
+            if (const MaterialInfo *info = m_ctx->materials()->find(material))
+                return m_thumbnails.insert(material, materialThumbnail(*info)).value();
+            return {};
+        }
+        const QFileInfo info = m_files->fileInfo(mapToSource(index));
+        if (info.isFile() && AssetTypes::hasImagePreview(info.suffix().toLower()))
+        {
+            const QImage image = m_thumbs->thumbnail(info.absoluteFilePath());
+            if (!image.isNull())
+                return QIcon(QPixmap::fromImage(image));
+        }
+        return {};
+    }
+
     EditorContext *m_ctx;
     QFileSystemModel *m_files;
+    FolderColors *m_colors;
+    ThumbnailCache *m_thumbs;
     mutable QHash<QString, QIcon> m_thumbnails;
 };
 
@@ -206,9 +216,12 @@ private:
 class FolderFilterModel : public QSortFilterProxyModel
 {
 public:
-    FolderFilterModel(QFileSystemModel *dirs, QObject *parent) : QSortFilterProxyModel(parent), m_dirs(dirs)
+    FolderFilterModel(QFileSystemModel *dirs, FolderColors *colors, QObject *parent)
+        : QSortFilterProxyModel(parent), m_dirs(dirs), m_colors(colors)
     {
         setSourceModel(dirs);
+        QObject::connect(colors, &FolderColors::changed, this, [this]
+                         { emit layoutChanged(); });
     }
 
     void setRoots(const QString &parent, const QStringList &shown)
@@ -217,6 +230,13 @@ public:
         m_parent = parent;
         m_shown = shown;
         endFilterChange(QSortFilterProxyModel::Direction::Rows);
+    }
+
+    QVariant data(const QModelIndex &index, int role) const override
+    {
+        if (role == Qt::DecorationRole && index.column() == 0)
+            return FolderColors::icon(m_colors->color(m_dirs->filePath(mapToSource(index))), 16);
+        return QSortFilterProxyModel::data(index, role);
     }
 
 protected:
@@ -233,6 +253,7 @@ protected:
 
 private:
     QFileSystemModel *m_dirs;
+    FolderColors *m_colors;
     QString m_parent;
     QStringList m_shown;
 };
@@ -240,33 +261,40 @@ private:
 AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget *parent)
     : QWidget(parent), m_ctx(ctx), m_importer(importer)
 {
+    m_colors = new FolderColors(this);
+    m_thumbs = new ThumbnailCache(this);
     m_dirs = new QFileSystemModel(this);
     m_dirs->setFilter(QDir::AllDirs | QDir::NoDotAndDotDot);
-    m_dirProxy = new FolderFilterModel(m_dirs, this);
+    m_dirProxy = new FolderFilterModel(m_dirs, m_colors, this);
     m_files = new QFileSystemModel(this);
     m_files->setFilter(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
     m_files->setNameFilterDisables(false);
-    m_proxy = new AssetFilterModel(ctx, m_files, this);
+    m_proxy = new AssetFilterModel(ctx, m_files, m_colors, m_thumbs, this);
 
     m_tree = new QTreeView(this);
+    m_tree->setObjectName("AssetTree");
     m_tree->setModel(m_dirProxy);
     for (int c = 1; c < 4; ++c)
         m_tree->hideColumn(c);
     m_tree->setHeaderHidden(true);
+    m_tree->setIconSize(QSize(16, 16));
+    m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     // Folders in the tree take files dragged from the grid (move) and from outside (import).
     m_tree->setAcceptDrops(true);
     m_tree->viewport()->setAcceptDrops(true);
     m_tree->viewport()->installEventFilter(this);
 
+    m_tiles = new AssetTileDelegate(this);
     m_list = new QListView(this);
+    m_list->setObjectName("AssetGrid");
     m_list->setModel(m_proxy);
+    m_list->setItemDelegate(m_tiles);
     m_list->setViewMode(QListView::IconMode);
-    m_list->setIconSize(QSize(kThumb, kThumb));
-    m_list->setGridSize(QSize(kThumb + 40, kThumb + 34));
     m_list->setResizeMode(QListView::Adjust);
     m_list->setMovement(QListView::Static);
-    m_list->setWordWrap(true);
     m_list->setUniformItemSizes(true);
+    m_list->setMouseTracking(true);
+    m_list->viewport()->setAttribute(Qt::WA_Hover);
     m_list->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_list->setDragEnabled(true);
     m_list->setDragDropMode(QAbstractItemView::DragOnly);
@@ -284,55 +312,118 @@ AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget 
     m_list->viewport()->installEventFilter(this);
 
     m_filter = new QLineEdit(this);
-    m_filter->setPlaceholderText(tr("Filter files..."));
+    m_filter->setObjectName("AssetSearch");
+    m_filter->setPlaceholderText(tr("Search"));
     m_filter->addAction(kes::style::icon("search"), QLineEdit::LeadingPosition);
     m_filter->setClearButtonEnabled(true);
 
-    auto *refresh = new QToolButton(this);
-    refresh->setText(tr("Refresh"));
-    refresh->setToolTip(tr("Rescan materials and refresh their thumbnails"));
-
-    m_current = new QLabel(this);
-    m_current->setToolTip(tr("Material used by the Material tool and given to new brushes"));
-
-    auto *importButton = new QToolButton(this);
-    importButton->setText(tr("Import..."));
-    importButton->setToolTip(tr("Import models, animations, textures and sounds into the project"));
-    auto *newButton = new QToolButton(this);
-    newButton->setText(tr("New"));
-    newButton->setToolTip(tr("Create an asset from a template"));
-    newButton->setPopupMode(QToolButton::InstantPopup);
-    auto *newMenu = new QMenu(newButton);
-    newButton->setMenu(newMenu);
+    // Top bar: Add, Import | back, forward | path
+    auto *addButton = new QToolButton(this);
+    addButton->setObjectName("AddButton");
+    addButton->setText(tr("+  Add"));
+    addButton->setToolTip(tr("Create a folder or an asset from a template"));
+    addButton->setPopupMode(QToolButton::InstantPopup);
+    auto *newMenu = new QMenu(addButton);
+    addButton->setMenu(newMenu);
     connect(newMenu, &QMenu::aboutToShow, this, [this, newMenu]
             {
         newMenu->clear();
         fillNewMenu(newMenu); });
+
+    auto *importButton = new QToolButton(this);
+    importButton->setText(tr("Import"));
+    importButton->setIcon(kes::style::icon("open"));
+    importButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    importButton->setToolTip(tr("Import models, animations, textures and sounds into the project"));
     connect(importButton, &QToolButton::clicked, this, [this]
             { m_importer->importDialog(targetFolder()); });
 
+    m_back = new QToolButton(this);
+    m_back->setObjectName("BackButton");
+    m_back->setIcon(kes::style::icon("left"));
+    m_back->setToolTip(tr("Back (Alt+Left)"));
+    m_forward = new QToolButton(this);
+    m_forward->setObjectName("ForwardButton");
+    m_forward->setIcon(kes::style::icon("right"));
+    m_forward->setToolTip(tr("Forward (Alt+Right)"));
+    connect(m_back, &QToolButton::clicked, this, &AssetBrowser::goBack);
+    connect(m_forward, &QToolButton::clicked, this, &AssetBrowser::goForward);
+    for (const auto &[keys, slot] : {std::pair{QKeySequence(Qt::ALT | Qt::Key_Left), &AssetBrowser::goBack},
+                                     std::pair{QKeySequence(Qt::ALT | Qt::Key_Right), &AssetBrowser::goForward},
+                                     std::pair{QKeySequence(Qt::ALT | Qt::Key_Up), &AssetBrowser::goUp}})
+    {
+        auto *shortcut = new QShortcut(keys, this, nullptr, nullptr, Qt::WidgetWithChildrenShortcut);
+        connect(shortcut, &QShortcut::activated, this, slot);
+    }
+
+    m_pathBar = new AssetPathBar(m_colors, this);
+    connect(m_pathBar, &AssetPathBar::navigate, this, [this](const QString &folder)
+            { showFolder(folder); });
+
+    m_current = new QLabel(this);
+    m_current->setObjectName("Muted");
+    m_current->setToolTip(tr("Material used by the Material tool and given to new brushes"));
+    auto *refresh = new QToolButton(this);
+    refresh->setIcon(kes::style::icon("refresh"));
+    refresh->setToolTip(tr("Rescan materials and refresh thumbnails"));
+
     auto *top = new QHBoxLayout;
+    top->setContentsMargins(6, 5, 6, 5);
+    top->setSpacing(4);
+    top->addWidget(addButton);
     top->addWidget(importButton);
-    top->addWidget(newButton);
-    top->addWidget(m_filter, 1);
+    top->addSpacing(8);
+    top->addWidget(m_back);
+    top->addWidget(m_forward);
+    top->addWidget(m_pathBar, 1);
+    top->addSpacing(6);
     top->addWidget(m_current);
     top->addWidget(refresh);
+    auto *topBar = new QWidget(this);
+    topBar->setObjectName("AssetTopBar");
+    topBar->setAttribute(Qt::WA_StyledBackground);
+    topBar->setLayout(top);
+
+    // Bottom bar: item count | tile size
+    m_count = new QLabel(this);
+    m_count->setObjectName("Muted");
+    m_zoom = new QSlider(Qt::Horizontal, this);
+    m_zoom->setRange(kThumbMin, kThumbMax);
+    m_zoom->setSingleStep(8);
+    m_zoom->setPageStep(16);
+    m_zoom->setFixedWidth(110);
+    m_zoom->setToolTip(tr("Tile size"));
+    connect(m_zoom, &QSlider::valueChanged, this, &AssetBrowser::setThumbSize);
+    auto *bottom = new QHBoxLayout;
+    bottom->setContentsMargins(8, 3, 8, 3);
+    bottom->addWidget(m_count, 1);
+    bottom->addWidget(m_zoom);
+    auto *bottomBar = new QWidget(this);
+    bottomBar->setObjectName("AssetBottomBar");
+    bottomBar->setAttribute(Qt::WA_StyledBackground);
+    bottomBar->setLayout(bottom);
 
     auto *split = new QSplitter(this);
     split->addWidget(m_tree);
     auto *right = new QWidget(split);
     auto *rl = new QVBoxLayout(right);
-    rl->setContentsMargins(0, 0, 0, 0);
-    rl->addLayout(top);
-    rl->addWidget(m_list);
+    rl->setContentsMargins(6, 6, 6, 0);
+    rl->setSpacing(6);
+    rl->addWidget(m_filter);
+    rl->addWidget(m_list, 1);
     split->addWidget(right);
-    split->setStretchFactor(1, 3);
+    split->setStretchFactor(1, 4);
+    split->setSizes({200, 800});
     auto *lay = new QVBoxLayout(this);
     lay->setContentsMargins(0, 0, 0, 0);
-    lay->addWidget(split);
+    lay->setSpacing(0);
+    lay->addWidget(topBar);
+    lay->addWidget(split, 1);
+    lay->addWidget(bottomBar);
 
     connect(m_tree, &QTreeView::clicked, this, [this](const QModelIndex &i)
             { showFolder(m_dirs->filePath(m_dirProxy->mapToSource(i))); });
+    connect(m_tree, &QTreeView::customContextMenuRequested, this, &AssetBrowser::showTreeContextMenu);
     connect(m_filter, &QLineEdit::textChanged, this, [this](const QString &t)
             { m_files->setNameFilters(t.isEmpty() ? QStringList() : QStringList{"*" + t + "*"}); });
     connect(m_list, &QListView::clicked, this, [this](const QModelIndex &i)
@@ -343,10 +434,18 @@ AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget 
     connect(m_list, &QListView::doubleClicked, this, [this](const QModelIndex &i)
             { openEntry(m_files->filePath(m_proxy->mapToSource(i))); });
     connect(m_list, &QListView::customContextMenuRequested, this, &AssetBrowser::showContextMenu);
+    connect(m_list->selectionModel(), &QItemSelectionModel::selectionChanged, this, &AssetBrowser::updateCount);
+    for (auto signal : {&QAbstractItemModel::rowsInserted, &QAbstractItemModel::rowsRemoved})
+        connect(m_proxy, signal, this, &AssetBrowser::updateCount);
+    connect(m_proxy, &QAbstractItemModel::layoutChanged, this, &AssetBrowser::updateCount);
+    connect(m_proxy, &QAbstractItemModel::modelReset, this, &AssetBrowser::updateCount);
+    connect(m_files, &QFileSystemModel::directoryLoaded, this, &AssetBrowser::updateCount);
     connect(refresh, &QToolButton::clicked, this, [this]
-            { m_ctx->materials()->reload(); });
+            {
+        m_thumbs->clear();
+        m_ctx->materials()->reload(); });
     connect(ctx->materials(), &MaterialLibrary::changed, this, [this]
-            { m_proxy->clearThumbnails(m_list->rootIndex()); });
+            { m_proxy->clearThumbnails(); });
     connect(ctx, &EditorContext::currentMaterialChanged, this, [this]
             { updateCurrent(); });
     connect(ctx, &EditorContext::projectDirChanged, this, [this]
@@ -355,6 +454,10 @@ AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget 
             {
         if (!outputs.isEmpty())
             reveal(outputs.first()); });
+
+    const int savedThumb = QSettings().value("assetBrowser/tileSize", 72).toInt();
+    m_zoom->setValue(std::clamp(savedThumb, kThumbMin, kThumbMax));
+    setThumbSize(m_zoom->value());
     setRoot(ctx->projectDir());
     updateCurrent();
 }
@@ -366,25 +469,110 @@ void AssetBrowser::setRoot(const QString &dir)
     const QString parent = QFileInfo(dir).absolutePath();
     const bool withConfig = project.isValid() && QDir(project.configDir).exists() &&
                             QDir(QFileInfo(project.configDir).absolutePath()) == QDir(parent);
-    const QString treeRoot = withConfig ? parent : dir;
+    m_treeRoot = withConfig ? parent : dir;
+    m_colors->setProject(project.isValid() ? project.filePath : dir, m_treeRoot);
 
     m_dirProxy->setRoots(withConfig ? parent : QString(), {dir, project.configDir});
-    m_dirs->setRootPath(treeRoot);
-    m_tree->setRootIndex(m_dirProxy->mapFromSource(m_dirs->index(treeRoot)));
+    m_dirs->setRootPath(m_treeRoot);
+    m_tree->setRootIndex(m_dirProxy->mapFromSource(m_dirs->index(m_treeRoot)));
     const QModelIndex content = m_dirProxy->mapFromSource(m_dirs->index(dir));
     if (withConfig)
-    {
         m_tree->expand(content);
-        m_tree->setCurrentIndex(content);
-    }
+    m_history.clear();
+    m_historyPos = -1;
+    m_folder.clear();
     showFolder(dir);
 }
 
-void AssetBrowser::showFolder(const QString &dir)
+void AssetBrowser::showFolder(const QString &dir, bool record)
 {
-    m_folder = dir;
-    m_files->setRootPath(dir);
-    m_list->setRootIndex(m_proxy->mapFromSource(m_files->index(dir)));
+    const QString clean = QDir::cleanPath(dir);
+    if (record && (m_historyPos < 0 || QDir(m_history.value(m_historyPos)) != QDir(clean)))
+    {
+        m_history = m_history.mid(0, m_historyPos + 1);
+        m_history << clean;
+        constexpr int kMaxHistory = 64;
+        if (m_history.size() > kMaxHistory)
+            m_history.removeFirst();
+        m_historyPos = int(m_history.size()) - 1;
+    }
+    m_folder = clean;
+    m_files->setRootPath(clean);
+    m_list->setRootIndex(m_proxy->mapFromSource(m_files->index(clean)));
+    const QModelIndex treeIndex = m_dirProxy->mapFromSource(m_dirs->index(clean));
+    if (treeIndex.isValid())
+    {
+        m_tree->expand(treeIndex.parent());
+        m_tree->setCurrentIndex(treeIndex);
+        m_tree->scrollTo(treeIndex);
+    }
+    m_pathBar->setPath(m_treeRoot, QFileInfo(m_treeRoot).fileName(), clean);
+    updateNavigation();
+    updateCount();
+}
+
+void AssetBrowser::goBack()
+{
+    while (m_historyPos > 0)
+    {
+        const QString target = m_history.value(--m_historyPos);
+        if (QFileInfo(target).isDir())
+        {
+            showFolder(target, false);
+            return;
+        }
+        m_history.removeAt(m_historyPos);
+    }
+    updateNavigation();
+}
+
+void AssetBrowser::goForward()
+{
+    while (m_historyPos + 1 < m_history.size())
+    {
+        const QString target = m_history.value(m_historyPos + 1);
+        if (QFileInfo(target).isDir())
+        {
+            ++m_historyPos;
+            showFolder(target, false);
+            return;
+        }
+        m_history.removeAt(m_historyPos + 1);
+    }
+    updateNavigation();
+}
+
+void AssetBrowser::goUp()
+{
+    if (m_folder.isEmpty() || QDir(m_folder) == QDir(m_treeRoot))
+        return;
+    showFolder(QFileInfo(m_folder).absolutePath());
+}
+
+void AssetBrowser::updateNavigation()
+{
+    m_back->setEnabled(m_historyPos > 0);
+    m_forward->setEnabled(m_historyPos + 1 < m_history.size());
+}
+
+void AssetBrowser::updateCount()
+{
+    const int items = m_proxy->rowCount(m_list->rootIndex());
+    int selected = 0;
+    for (const QModelIndex &index : m_list->selectionModel()->selectedIndexes())
+        if (index.column() == 0)
+            ++selected;
+    const QString count = items == 1 ? tr("1 item") : tr("%1 items").arg(items);
+    m_count->setText(selected > 0 ? tr("%1, %2 selected").arg(count).arg(selected) : count);
+}
+
+void AssetBrowser::setThumbSize(int size)
+{
+    m_tiles->setThumbSize(size);
+    m_list->setIconSize(QSize(size, size));
+    m_list->setGridSize(m_tiles->tileSize());
+    m_list->doItemsLayout();
+    QSettings().setValue("assetBrowser/tileSize", size);
 }
 
 QString AssetBrowser::targetFolder() const
@@ -469,6 +657,15 @@ bool AssetBrowser::eventFilter(QObject *watched, QEvent *event)
             key->accept();
             if (event->type() == QEvent::KeyPress)
                 deleteEntries(selectedPaths());
+            return true;
+        }
+    }
+    if ((watched == m_tree->viewport() || watched == m_list->viewport()) && event->type() == QEvent::MouseButtonPress)
+    {
+        const auto button = static_cast<QMouseEvent *>(event)->button();
+        if (button == Qt::BackButton || button == Qt::ForwardButton)
+        {
+            button == Qt::BackButton ? goBack() : goForward();
             return true;
         }
     }
@@ -605,6 +802,12 @@ void AssetBrowser::showContextMenu(const QPoint &pos)
         bold.setBold(true);
         open->setFont(bold);
         menu.addSeparator();
+        QStringList folders;
+        for (const QString &target : targets)
+            if (QFileInfo(target).isDir())
+                folders << target;
+        addColorMenu(menu, folders);
+        menu.addSeparator();
         addFileActions();
         menu.addSeparator();
         menu.addAction(tr("Show in Explorer"), this, [file]
@@ -620,6 +823,9 @@ void AssetBrowser::showContextMenu(const QPoint &pos)
     QFont bold = open->font();
     bold.setBold(true);
     open->setFont(bold);
+    if (m_canPreview && m_canPreview(file))
+        menu.addAction(tr("Preview"), this, [this, file]
+                       { emit previewAssetRequested(file); });
     if (AssetImporter::canImport(file))
         menu.addAction(tr("Import into Project"), this, [this, file]
                        { m_importer->import({file}, QFileInfo(file).absolutePath()); });
@@ -840,11 +1046,14 @@ void AssetBrowser::relocate(const QList<QPair<QString, QString>> &moves)
         const QString fromClean = QDir::cleanPath(QFileInfo(from).absoluteFilePath());
         const bool sameFolder = QFileInfo(from).absoluteDir() == QFileInfo(to).absoluteDir();
         QString error;
+        const bool isFolder = QFileInfo(from).isDir();
         if (!AssetFileOps::relocate(from, to, &moved, &error, &warnings))
         {
             errors << error;
             continue;
         }
+        if (isFolder)
+            m_colors->moved(from, to);
         m_ctx->log(sameFolder ? tr("Renamed %1 to %2").arg(shown(from), QFileInfo(to).fileName())
                               : tr("Moved %1 to %2").arg(shown(from), shown(to)));
         if (sameFolder)
@@ -921,11 +1130,14 @@ void AssetBrowser::deleteEntries(const QStringList &paths)
     {
         const QString clean = QDir::cleanPath(QFileInfo(path).absoluteFilePath());
         QString error;
+        const bool isFolder = QFileInfo(path).isDir();
         if (!AssetFileOps::remove(path, &removed, &error, &warnings))
         {
             errors << error;
             continue;
         }
+        if (isFolder)
+            m_colors->removed(path);
         m_ctx->log(tr("Deleted %1").arg(shown(path)));
         const QString current = QDir::cleanPath(m_folder);
         if (current.compare(clean, Qt::CaseInsensitive) == 0 || current.startsWith(clean + '/', Qt::CaseInsensitive))
@@ -952,6 +1164,72 @@ void AssetBrowser::deleteEntries(const QStringList &paths)
         QMessageBox::warning(this, tr("Delete"), errors.join('\n'));
 }
 
+void AssetBrowser::addColorMenu(QMenu &menu, const QStringList &folders)
+{
+    if (folders.isEmpty())
+        return;
+    QMenu *colors = menu.addMenu(FolderColors::icon(m_colors->color(folders.first()), 16), tr("Set Color"));
+    for (const auto &[name, color] : FolderColors::presets())
+        colors->addAction(FolderColors::icon(color, 16), name, this, [this, folders, color]
+                          {
+            for (const QString &folder : folders)
+                m_colors->setColor(folder, color); });
+    colors->addSeparator();
+    colors->addAction(tr("Custom..."), this, [this, folders]
+                      {
+        const QColor current = m_colors->color(folders.first());
+        const QColor chosen = QColorDialog::getColor(current.isValid() ? current : FolderColors::defaultColor(), this, tr("Folder Color"));
+        if (chosen.isValid())
+            for (const QString &folder : folders)
+                m_colors->setColor(folder, chosen); });
+    bool anyColored = false;
+    for (const QString &folder : folders)
+        anyColored |= m_colors->color(folder).isValid();
+    QAction *clear = colors->addAction(tr("Clear Color"), this, [this, folders]
+                                       {
+        for (const QString &folder : folders)
+            m_colors->setColor(folder, QColor()); });
+    clear->setEnabled(anyColored);
+}
+
+void AssetBrowser::addFolderActions(QMenu &menu, const QString &folder)
+{
+    menu.addAction(tr("New Folder..."), this, [this, folder]
+                   { createFolder(folder); });
+    QMenu *add = menu.addMenu(tr("New Asset"));
+    const QString target = QDir(folder) == QDir(m_ctx->projectDir()) ? QString() : folder;
+    for (const AssetTemplate &tmpl : assetTemplates())
+        add->addAction(tmpl.label, this, [this, tmpl, target]
+                       { createFromTemplate(tmpl, target); });
+    menu.addAction(tr("Import..."), this, [this, target]
+                   { m_importer->importDialog(target); });
+    menu.addSeparator();
+    addColorMenu(menu, {folder});
+}
+
+void AssetBrowser::showTreeContextMenu(const QPoint &pos)
+{
+    const QModelIndex index = m_tree->indexAt(pos);
+    if (!index.isValid())
+        return;
+    const QString folder = m_dirs->filePath(m_dirProxy->mapToSource(index));
+    const bool isRoot = QDir(folder) == QDir(m_ctx->projectDir()) || QDir(folder) == QDir(m_ctx->project().configDir);
+    QMenu menu(this);
+    addFolderActions(menu, folder);
+    menu.addSeparator();
+    if (!isRoot)
+    {
+        menu.addAction(tr("Rename"), this, [this, folder]
+                       { renameEntry(folder); });
+        menu.addAction(tr("Delete"), this, [this, folder]
+                       { deleteEntries({folder}); });
+        menu.addSeparator();
+    }
+    menu.addAction(tr("Show in Explorer"), this, [folder]
+                   { QDesktopServices::openUrl(QUrl::fromLocalFile(folder)); });
+    menu.exec(m_tree->viewport()->mapToGlobal(pos));
+}
+
 void AssetBrowser::updateCurrent()
 {
     const QString current = m_ctx->currentMaterial();
@@ -965,7 +1243,7 @@ ConsolePanel::ConsolePanel(EditorContext *ctx, QWidget *parent) : QPlainTextEdit
     setFont(QFont("monospace", 9));
     connect(ctx, &EditorContext::logMessage, this, [this](const QString &text, int level)
             {
-        static const char* colors[3] = {"#dcdce0", "#f0c040", "#f06060"};
-        appendHtml(QString("<span style='color:#7a7a80'>%1</span> <span style='color:%2'>%3</span>")
+        static const char* colors[3] = {"#dfe2e8", "#f2c94c", "#f26d6d"};
+        appendHtml(QString("<span style='color:#7a8090'>%1</span> <span style='color:%2'>%3</span>")
                        .arg(QDateTime::currentDateTime().toString("HH:mm:ss"), colors[std::clamp(level, 0, 2)], text.toHtmlEscaped())); });
 }

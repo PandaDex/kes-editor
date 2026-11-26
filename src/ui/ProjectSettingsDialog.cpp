@@ -81,7 +81,7 @@ ProjectSettingsDialog::ProjectSettingsDialog(EditorContext *ctx, QWidget *parent
     m_entityDefs = new QLineEdit(p.entityDefPathsValue == QLatin1String("editor") ? QString() : p.entityDefPathsValue, this);
     m_entityDefs->setPlaceholderText(tr("editor"));
     m_entityDefs->setToolTip(tr("Folders with the project's .dec entity definitions, relative to the .kproject folder, separated by ';'. "
-                                "Empty uses \"editor\". They load after Forge's own entities and can override them."));
+                                "Empty uses \"editor\". They load after the editor's own entities and can override them."));
     auto *addDefs = new QPushButton(tr("Add Folder..."), this);
     connect(addDefs, &QPushButton::clicked, this, &ProjectSettingsDialog::addEntityDefFolder);
     form->addRow(tr("&Entity definitions"), withButtons(m_entityDefs, { addDefs }, this));
@@ -153,7 +153,7 @@ void ProjectSettingsDialog::updateState()
     QString warning;
     const QString error = validate(&warning);
     m_status->setText(error.isEmpty() ? warning : error);
-    m_status->setStyleSheet(error.isEmpty() ? QString() : QStringLiteral("color: #e05050;"));
+    m_status->setStyleSheet(error.isEmpty() ? QString() : QStringLiteral("color: #f26d6d;"));
     m_buttons->button(QDialogButtonBox::Save)->setEnabled(error.isEmpty());
 
     const QString current = m_ctx->doc()->filePath();
@@ -187,7 +187,7 @@ void ProjectSettingsDialog::browseStartupMap()
     if (m_startupMap->text().trimmed().isEmpty() || !QFileInfo::exists(start))
         start = QDir(contentRoot()).exists("maps") ? QDir(contentRoot()).filePath("maps") : contentRoot();
     const QString file = QFileDialog::getOpenFileName(this, tr("Startup Map"), start,
-        tr("Maps (*.fmapc *.fmap);;Compiled Maps (*.fmapc);;Forge Maps (*.fmap)"));
+        tr("Maps (*.fmapc *.fmap);;Compiled Maps (*.fmapc);;KES Maps (*.fmap)"));
     if (file.isEmpty())
         return;
     const QString map = toStartupMap(file);

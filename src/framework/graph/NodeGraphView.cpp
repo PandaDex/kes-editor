@@ -217,7 +217,7 @@ namespace nodegraph
         p->save();
         p->resetTransform();
         p->setRenderHint(QPainter::Antialiasing, false);
-        p->fillRect(dev, QColor(0x22, 0x22, 0x26));
+        p->fillRect(dev, QColor(0x0e, 0x10, 0x16));
 
         constexpr int minor = 20, major = 100;
         auto drawGrid = [&](int step, const QColor& c, bool skipMajor)
@@ -235,10 +235,10 @@ namespace nodegraph
                 p->fillRect(QRectF(dev.left(), std::floor(y * z + t.dy()), dev.width(), 1), c);
             }
         };
-        if (z > 0.45) drawGrid(minor, QColor(255, 255, 255, 10), true);
-        drawGrid(major, QColor(255, 255, 255, z > 0.3 ? 22 : 12), false);
+        if (z > 0.45) drawGrid(minor, QColor(255, 255, 255, 9), true);
+        drawGrid(major, QColor(255, 255, 255, z > 0.3 ? 18 : 10), false);
 
-        const QColor axis(255, 255, 255, 40);
+        const QColor axis(255, 255, 255, 32);
         if (rect.left() < 0 && rect.right() > 0) p->fillRect(QRectF(std::floor(t.dx()) - 1, dev.top(), 2, dev.height()), axis);
         if (rect.top() < 0 && rect.bottom() > 0) p->fillRect(QRectF(dev.left(), std::floor(t.dy()) - 1, dev.width(), 2), axis);
         p->restore();

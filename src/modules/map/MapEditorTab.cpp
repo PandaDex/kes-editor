@@ -537,7 +537,7 @@ void MapEditorTab::buildMap()
         ? QDir(m_ctx->mapsDir()).filePath("untitled.fmapc")
         : sourceInfo.dir().filePath(sourceInfo.completeBaseName() + ".fmapc");
     QString outputPath = QFileDialog::getSaveFileName(
-        this, tr("Build Map"), defaultName, tr("Forge Compiled Map (*.fmapc)"));
+        this, tr("Build Map"), defaultName, tr("KES Compiled Map (*.fmapc)"));
     if (outputPath.isEmpty())
         return;
     if (QFileInfo(outputPath).suffix().isEmpty())
@@ -599,7 +599,7 @@ bool MapEditorTab::save()
 
 bool MapEditorTab::saveAs()
 {
-    QString f = QFileDialog::getSaveFileName(this, tr("Save Map"), m_ctx->mapsDir(), tr("Forge Map (*.fmap)"));
+    QString f = QFileDialog::getSaveFileName(this, tr("Save Map"), m_ctx->mapsDir(), tr("KES Map (*.fmap)"));
     if (f.isEmpty())
         return false;
     if (!f.endsWith(".fmap"))

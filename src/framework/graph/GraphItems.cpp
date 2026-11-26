@@ -70,7 +70,7 @@ namespace nodegraph
         const qreal r = (m_hover || m_drop == 1) ? 7.0 : 5.5;
         if (m_drop == -1)
         {
-            p->setPen(QPen(QColor("#ff5555"), 2));
+            p->setPen(QPen(kes::style::error(), 2));
             p->setBrush(Qt::NoBrush);
             p->drawEllipse(QPointF(0, 0), 7.5, 7.5);
             return;
@@ -82,7 +82,7 @@ namespace nodegraph
             p->drawEllipse(QPointF(0, 0), 9, 9);
         }
         p->setPen(QPen(c.darker(150), 1.5));
-        p->setBrush(m_connected ? c : QColor("#26262b"));
+        p->setBrush(m_connected ? c : QColor("#11141b"));
         p->drawEllipse(QPointF(0, 0), r, r);
         if (!m_connected)
         {
@@ -284,7 +284,7 @@ namespace nodegraph
         const qreal lod = QStyleOptionGraphicsItem::levelOfDetailFromTransform(p->worldTransform());
         const QRectF body(0, 0, m_width, m_height);
         const bool selected = opt->state & QStyle::State_Selected;
-        const QColor border = selected ? kes::style::accent() : QColor("#161618");
+        const QColor border = selected ? kes::style::accent() : QColor("#262b36");
         const qreal bw = selected ? 2.4 : 1.2;
 
         if (lod < kLodSimple)
@@ -300,7 +300,7 @@ namespace nodegraph
             {
                 p->setPen(Qt::NoPen);
             }
-            p->setBrush(QColor("#2f2f36"));
+            p->setBrush(QColor("#161a22"));
             p->drawRect(body);
             p->setPen(Qt::NoPen);
             p->setBrush(m_titleFlat);
@@ -310,10 +310,10 @@ namespace nodegraph
 
         p->setRenderHint(QPainter::Antialiasing, true);
         p->setPen(Qt::NoPen);
-        p->setBrush(QColor(0, 0, 0, 60));
+        p->setBrush(QColor(0, 0, 0, 90));
         p->drawRoundedRect(body.translated(2.5, 3.5), 7, 7);
 
-        p->setBrush(QColor("#2f2f36"));
+        p->setBrush(QColor("#161a22"));
         p->drawPath(m_shape);
 
         p->setBrush(m_titleBrush);
@@ -323,7 +323,7 @@ namespace nodegraph
         p->setPen(QPen(border, bw));
         p->drawPath(m_shape);
 
-        p->setPen(QColor("#f4f4f6"));
+        p->setPen(QColor("#f4f5f7"));
         p->setFont(m_titleFont);
         p->drawText(QRectF(kPad, 0, m_width - 2 * kPad, kTitleH), Qt::AlignVCenter | Qt::AlignLeft, m_def->title);
 
@@ -339,7 +339,7 @@ namespace nodegraph
         if (lod < kLodText) return;
 
         p->setFont(m_font);
-        p->setPen(QColor("#dcdce2"));
+        p->setPen(QColor("#dfe2e8"));
         for (int i = 0; i < m_inputs.size(); ++i)
         {
             const qreal y = kTitleH + 6 + i * kRowH;
@@ -353,7 +353,7 @@ namespace nodegraph
         }
 
         p->setFont(m_smallFont);
-        p->setPen(QColor("#8a8a96"));
+        p->setPen(kes::style::muted());
         for (int i = 0; i < m_inputs.size(); ++i)
         {
             if (m_inputs[i]->isConnected()) continue;
@@ -370,13 +370,13 @@ namespace nodegraph
         if (!m_paramLines.isEmpty())
         {
             const qreal y0 = kTitleH + 6 + std::max<int>(1, int(std::max(m_inputs.size(), m_outputs.size()))) * kRowH + 2;
-            p->setPen(QColor("#3d3d46"));
+            p->setPen(QColor("#262b36"));
             p->drawLine(QPointF(kPad, y0), QPointF(m_width - kPad, y0));
             p->setFont(m_font);
             for (int k = 0; k < m_paramLines.size(); ++k)
             {
                 const qreal y = y0 + 3 + k * kParamH;
-                p->setPen(QColor("#b4b4c0"));
+                p->setPen(QColor("#c9cdd5"));
                 p->drawText(QRectF(kPad + 4, y, m_width - 2 * kPad, kParamH), Qt::AlignVCenter | Qt::AlignLeft, m_paramLines[k]);
                 if (m_paramColors[k].isValid())
                 {

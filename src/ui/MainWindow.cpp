@@ -6,6 +6,7 @@
 #include "framework/EditorTab.h"
 #include "modules/map/MapEditorTab.h"
 #include "ui/AssetBrowser.h"
+#include "ui/BrandDialogs.h"
 #include "ui/KesStyle.h"
 #include "ui/ProblemsPanel.h"
 #include "ui/ProjectSettingsDialog.h"
@@ -62,8 +63,8 @@ MainWindow::MainWindow()
     createAssetsMenu();
     createWindowMenu();
     m_helpMenu = new QMenu(tr("&Help"), this);
-    m_helpMenu->addAction(tr("&About Forge"), this, [this]
-        { QMessageBox::about(this, tr("About Forge"), tr("<b>Forge</b> - the KES Engine editor")); });
+    m_helpMenu->addAction(tr("&About KES Editor"), this, [this]
+        { showAbout(this); });
 
     m_mapTab = static_cast<MapEditorTab*>(m_modules.module("map")->createTab(m_ctx));
     addTab(m_mapTab, false);
@@ -84,7 +85,7 @@ MainWindow::MainWindow()
     }
     setAcceptDrops(true);
 
-    m_ctx->log(tr("Forge ready. Entity classes: %1 point, %2 solid.")
+    m_ctx->log(tr("KES Editor ready. Entity classes: %1 point, %2 solid.")
             .arg(m_ctx->registry()->classes(ClassKind::Point).size())
             .arg(m_ctx->registry()->classes(ClassKind::Solid).size()));
 
@@ -230,6 +231,9 @@ void MainWindow::createDocks()
 
     m_assets = new AssetBrowser(m_ctx, m_importer);
     connect(m_assets, &AssetBrowser::openAssetRequested, this, &MainWindow::openFile);
+    m_assets->setPreviewFilter([this](const QString& path)
+        { return m_modules.previewModuleFor(path) != nullptr; });
+    connect(m_assets, &AssetBrowser::previewAssetRequested, this, &MainWindow::previewFile);
     auto* browser = addDock(tr("Asset Browser"), m_assets);
     auto* console = addDock(tr("Console"), new ConsolePanel(m_ctx));
     tabifyDockWidget(browser, console);
@@ -377,7 +381,7 @@ bool MainWindow::openFile(const QString& path)
     const EditorModule* module = m_modules.moduleFor(path);
     if (!module)
     {
-        m_ctx->log(tr("Forge has no editor for %1.").arg(QFileInfo(path).fileName()), LogLevel::Warning);
+        m_ctx->log(tr("KES Editor has no editor for %1.").arg(QFileInfo(path).fileName()), LogLevel::Warning);
         return false;
     }
     for (int i = 0; i < m_tabs->count(); ++i)
@@ -420,6 +424,33 @@ bool MainWindow::openFile(const QString& path)
     }
     addRecentFile(path);
     updateTabText(tab);
+    updateTitle();
+    return true;
+}
+
+bool MainWindow::previewFile(const QString& path)
+{
+    const EditorModule* module = m_modules.previewModuleFor(path);
+    if (!module)
+        return false;
+    for (int i = 0; i < m_tabs->count(); ++i)
+    {
+        EditorTab* tab = tabAt(i);
+        if (tab->moduleId() == module->id() && tab->handlesFile(path))
+        {
+            m_tabs->setCurrentIndex(i);
+            return true;
+        }
+    }
+    EditorTab* tab = module->createTab(m_ctx);
+    QString error;
+    if (!tab->openFile(path, &error))
+    {
+        delete tab;
+        QMessageBox::critical(this, tr("Preview failed"), error.isEmpty() ? tr("Could not preview %1.").arg(path) : error);
+        return false;
+    }
+    addTab(tab, module->closable());
     updateTitle();
     return true;
 }
@@ -494,9 +525,9 @@ void MainWindow::updateTabText(EditorTab* tab)
 void MainWindow::updateTitle()
 {
     EditorTab* tab = currentTab();
-    const QString doc = tab ? tab->displayName() : tr("Forge");
+    const QString doc = tab ? tab->displayName() : tr("KES Editor");
     const QString project = m_ctx->project().isValid() ? m_ctx->project().name : tr("no project");
-    setWindowTitle(kes::style::windowTitle(QString("%1 (%2)").arg(doc, project), tr("Forge")));
+    setWindowTitle(kes::style::windowTitle(QString("%1 (%2)").arg(doc, project), tr("KES Editor")));
     setWindowModified(tab && tab->isModified());
 }
 
@@ -535,19 +566,9 @@ bool MainWindow::openProject(const QString& path)
 
 void MainWindow::promptForProject()
 {
-    QMessageBox box(this);
-    box.setWindowTitle(tr("Open Project"));
-    box.setIcon(QMessageBox::Question);
-    box.setText(tr("Open a KES project (.kproject)?"));
-    box.setInformativeText(tr("The project file tells Forge where the game's maps, materials and textures are. "
-                              "Without one, Forge uses %1 as the content folder.")
-            .arg(QDir::toNativeSeparators(m_ctx->projectDir())));
-    QPushButton* open = box.addButton(tr("Open Project..."), QMessageBox::AcceptRole);
-    box.addButton(tr("Continue Without Project"), QMessageBox::RejectRole);
-    box.setDefaultButton(open);
-    box.exec();
-    if (box.clickedButton() == open)
-        openProject();
+    WelcomeDialog welcome(this);
+    if (welcome.exec() == QDialog::Accepted)
+        openProject(welcome.chosenProject());
 }
 
 void MainWindow::closeEvent(QCloseEvent* e)

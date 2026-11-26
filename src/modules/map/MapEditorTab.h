@@ -79,7 +79,7 @@ class MapModule : public EditorModule
 {
 public:
     QString id() const override { return QStringLiteral("map"); }
-    QString name() const override { return QStringLiteral("Forge Map"); }
+    QString name() const override { return QStringLiteral("KES Map"); }
     QStringList extensions() const override { return { QStringLiteral("fmap") }; }
     QString newLabel() const override { return QStringLiteral("Map"); }
     bool allowsMultipleTabs() const override { return false; }

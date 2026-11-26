@@ -30,6 +30,15 @@ const EditorModule* ModuleRegistry::moduleFor(const QString& path) const
     return nullptr;
 }
 
+const EditorModule* ModuleRegistry::previewModuleFor(const QString& path) const
+{
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    if (suffix.isEmpty()) return nullptr;
+    for (const auto& m : m_modules)
+        if (m->previewExtensions().contains(suffix)) return m.get();
+    return nullptr;
+}
+
 std::vector<const EditorModule*> ModuleRegistry::modules() const
 {
     std::vector<const EditorModule*> out;
@@ -43,6 +52,8 @@ QString ModuleRegistry::openFilter() const
     QStringList all, filters;
     for (const auto& m : m_modules)
     {
+        if (m->extensions().isEmpty())
+            continue;
         for (const QString& ext : m->extensions())
             all << "*." + ext;
         filters << m->fileFilter();

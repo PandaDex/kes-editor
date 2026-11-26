@@ -20,7 +20,7 @@
 
 namespace
 {
-    const QColor kOrange(255, 150, 30);
+    const QColor kOrange(245, 181, 74); // kes::style accent
     constexpr float kDeg2Rad = 3.14159265358979f / 180.f;
 }
 
@@ -373,9 +373,9 @@ void Viewport::paintGL()
                                size() * devicePixelRatioF());
 
     if (ortho)
-        glClearColor(0.105f, 0.105f, 0.115f, 1.f);
+        glClearColor(0.055f, 0.063f, 0.086f, 1.f);
     else
-        glClearColor(0.19f, 0.21f, 0.25f, 1.f);
+        glClearColor(0.15f, 0.17f, 0.21f, 1.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     Batch b;
@@ -636,9 +636,9 @@ void Viewport::paintOverlay(QPainter &p)
         const QRectF r(at.x(), at.y(), fm.horizontalAdvance(text) + 14, fm.height() + 6);
         p.save();
         p.setRenderHint(QPainter::Antialiasing);
-        p.setPen(accent ? QPen(QColor(240, 150, 58, 200), 1) : Qt::NoPen);
-        p.setBrush(QColor(18, 19, 22, 190));
-        p.drawRoundedRect(r, 4, 4);
+        p.setPen(accent ? QPen(QColor(245, 181, 74, 210), 1) : Qt::NoPen);
+        p.setBrush(QColor(11, 13, 18, 205));
+        p.drawRoundedRect(r, 6, 6);
         p.setPen(fg);
         p.drawText(r, Qt::AlignCenter, text);
         p.restore();
@@ -651,12 +651,12 @@ void Viewport::paintOverlay(QPainter &p)
         const ShadingMode mode = m_ctx->shadingMode();
         heading += mode == ShadingMode::Lit ? tr(" - Lit") : mode == ShadingMode::Unlit ? tr(" - Unlit") : tr(" - Shaded");
     }
-    pill(QPointF(6, 6), heading, active ? QColor(255, 214, 170) : QColor(225, 225, 230), active);
+    pill(QPointF(6, 6), heading, active ? QColor(255, 217, 154) : QColor(223, 226, 232), active);
 
     if (isOrtho())
     {
         const QString info = tr("Grid %1   Zoom %2%").arg(m_ctx->gridSize()).arg(int(m_cam.zoom * 100));
-        pill(QPointF(6, height() - QFontMetrics(p.font()).height() - 12), info, QColor(200, 200, 205), false);
+        pill(QPointF(6, height() - QFontMetrics(p.font()).height() - 12), info, QColor(190, 195, 205), false);
         if (m_cam.zoom >= 0.25f)
         {
             p.setPen(QColor(220, 220, 220, 170));
@@ -674,7 +674,7 @@ void Viewport::paintOverlay(QPainter &p)
     }
     else
     {
-        pill(QPointF(6, height() - QFontMetrics(p.font()).height() - 12), tr("Speed %1").arg(int(m_moveSpeed)), QColor(200, 200, 205), false);
+        pill(QPointF(6, height() - QFontMetrics(p.font()).height() - 12), tr("Speed %1").arg(int(m_moveSpeed)), QColor(190, 195, 205), false);
     }
     const QMatrix4x4 inverseView = m_cam.view.inverted();
     const QVector3D right = inverseView.mapVector({1.f, 0.f, 0.f}).normalized();
@@ -705,7 +705,7 @@ void Viewport::paintOverlay(QPainter &p)
     }
     if (active)
     {
-        p.setPen(QPen(QColor(240, 150, 58, 200), 2));
+        p.setPen(QPen(QColor(245, 181, 74, 210), 2));
         p.setBrush(Qt::NoBrush);
         p.drawRect(rect().adjusted(1, 1, -1, -1));
     }

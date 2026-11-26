@@ -70,7 +70,7 @@ namespace kme
             auto* a = new QAction(text, parent);
             if (!ks.isEmpty()) a->setShortcut(ks);
             if (!icon.isEmpty()) a->setIcon(kes::style::icon(icon));
-            QObject::connect(a, &QAction::triggered, parent, std::move(slot));
+            if (slot) QObject::connect(a, &QAction::triggered, parent, std::move(slot));
             return a;
         }
 

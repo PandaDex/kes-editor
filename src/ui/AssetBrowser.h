@@ -1,9 +1,16 @@
 #pragma once
 #include <QPlainTextEdit>
 #include <QWidget>
+#include <functional>
 
 class AssetFilterModel;
 class AssetImporter;
+class AssetPathBar;
+class AssetTileDelegate;
+class FolderColors;
+class ThumbnailCache;
+class QSlider;
+class QToolButton;
 class FolderFilterModel;
 class EditorContext;
 class QDropEvent;
@@ -27,16 +34,28 @@ public:
     void createFromTemplate(const AssetTemplate &tmpl, const QString &folder);
     void reveal(const QString &path);
     void fillNewMenu(QMenu *menu);
+    void setPreviewFilter(std::function<bool(const QString &path)> canPreview) { m_canPreview = std::move(canPreview); }
 
 signals:
     void openAssetRequested(const QString &path);
+    void previewAssetRequested(const QString &path);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     void setRoot(const QString &dir);
-    void showFolder(const QString &dir);
+    // Shows `dir` in the grid, syncs the tree and path bar; `record` adds it to back/forward history.
+    void showFolder(const QString &dir, bool record = true);
+    void goBack();
+    void goForward();
+    void goUp();
+    void updateNavigation();
+    void updateCount();
+    void setThumbSize(int size);
+    void showTreeContextMenu(const QPoint &pos);
+    void addFolderActions(QMenu &menu, const QString &folder);
+    void addColorMenu(QMenu &menu, const QStringList &folders);
     void openEntry(const QString &path);
     QString materialPath(const QModelIndex &proxyIndex) const;
     void applyToSelection(const QString &material);
@@ -63,7 +82,19 @@ private:
     QListView *m_list;
     QLineEdit *m_filter;
     QLabel *m_current;
+    QLabel *m_count = nullptr;
+    QSlider *m_zoom = nullptr;
+    QToolButton *m_back = nullptr;
+    QToolButton *m_forward = nullptr;
+    AssetPathBar *m_pathBar = nullptr;
+    AssetTileDelegate *m_tiles = nullptr;
+    FolderColors *m_colors = nullptr;
+    ThumbnailCache *m_thumbs = nullptr;
     QString m_folder;
+    QString m_treeRoot;
+    QStringList m_history;
+    int m_historyPos = -1;
+    std::function<bool(const QString &path)> m_canPreview;
 };
 
 class ConsolePanel : public QPlainTextEdit

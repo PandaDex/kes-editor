@@ -6,7 +6,7 @@
 //   "@forge"         open in this editor; extensions claimed by an editor module
 //                    (src/modules/BuiltinModules.cpp) always open in Forge
 //   "@system"        the OS default application
-//   "name"           found in kToolSearchDirs, next to forge.exe, then on PATH
+//   "name"           found in kToolSearchDirs, next to kes-editor.exe, then on PATH
 //   "dir/name.exe"   relative to the .kproject folder, or an absolute path
 //   "a|b"            first program that is found wins
 //
