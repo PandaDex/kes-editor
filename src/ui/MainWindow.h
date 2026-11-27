@@ -56,6 +56,8 @@ private:
 
     bool openProject(const QString& path = QString());
     void promptForProject();
+    QString projectKey() const;
+    void openStartupMap();
     void chooseContentDir();
     void addRecentFile(const QString& path);
     void rebuildRecentMenu();

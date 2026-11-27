@@ -8,6 +8,9 @@
 #include <QLineEdit>
 #include <QToolButton>
 #include <QTabWidget>
+#include <QPair>
+#include <QSettings>
+#include <algorithm>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QTreeWidgetItemIterator>
@@ -80,6 +83,25 @@ OutlinerPanel::OutlinerPanel(EditorContext *ctx, QWidget *parent) : QWidget(pare
     m_tabs->addTab(m_hierarchy, tr("Hierarchy"));
     m_tabs->addTab(m_visgroups, tr("Visgroups"));
     layout->addWidget(m_tabs);
+
+    // column order/widths and the open tab live in QSettings
+    const QPair<QTreeWidget *, QString> headers[] = {{m_hierarchy, QStringLiteral("outliner/hierarchyHeader")},
+                                                     {m_visgroups, QStringLiteral("outliner/visgroupsHeader")}};
+    for (const auto &[tree, key] : headers)
+    {
+        QHeaderView *header = tree->header();
+        header->setSectionsMovable(true);
+        const QByteArray state = QSettings().value(key).toByteArray();
+        if (!state.isEmpty())
+            header->restoreState(state);
+        auto store = [header, key = key]
+        { QSettings().setValue(key, header->saveState()); };
+        connect(header, &QHeaderView::sectionMoved, this, store);
+        connect(header, &QHeaderView::sectionResized, this, store);
+    }
+    m_tabs->setCurrentIndex(std::clamp(QSettings().value("outliner/tab", 0).toInt(), 0, m_tabs->count() - 1));
+    connect(m_tabs, &QTabWidget::currentChanged, this, [](int index)
+            { QSettings().setValue("outliner/tab", index); });
 
     connect(groupButton, &QToolButton::clicked, this, &OutlinerPanel::setSelectionGroup);
     connect(ungroupButton, &QToolButton::clicked, this, [this]

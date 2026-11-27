@@ -85,6 +85,8 @@ private:
     bool m_ready = false;
 
     GLuint m_sceneBlock = 0;
+    GLuint m_clusterLights = 0; // SSBO binding 1, point/spot lights
+    GLuint m_clusterGrid = 0;   // SSBO binding 2, cluster headers + light indices
     GLuint m_cascadeMap = 0;
     GLuint m_localMap = 0;
     GLuint m_shadowFbo = 0;

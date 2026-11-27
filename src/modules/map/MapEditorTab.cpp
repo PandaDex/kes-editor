@@ -23,6 +23,7 @@
 #include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
+#include <QSettings>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStandardPaths>
@@ -55,6 +56,7 @@ MapEditorTab::MapEditorTab(EditorContext* ctx, QWidget* parent)
     connect(m_ctx->doc(), &MapDocument::pathChanged, this, &EditorTab::titleChanged);
 
     restoreLayout();
+    restoreViewLayout();
     m_ctx->setActiveViewport(m_views[0]);
 
     auto* autosaveTimer = new QTimer(this);
@@ -396,9 +398,11 @@ void MapEditorTab::createViewports()
         s->setHandleWidth(3);
     }
     connect(m_rows[0], &QSplitter::splitterMoved, this, [this]
-        { m_rows[1]->setSizes(m_rows[0]->sizes()); });
+        { m_rows[1]->setSizes(m_rows[0]->sizes()); saveViewSplitters(); });
     connect(m_rows[1], &QSplitter::splitterMoved, this, [this]
-        { m_rows[0]->setSizes(m_rows[1]->sizes()); });
+        { m_rows[0]->setSizes(m_rows[1]->sizes()); saveViewSplitters(); });
+    connect(m_vsplit, &QSplitter::splitterMoved, this, [this]
+        { saveViewSplitters(); });
     setCentralWidget(m_vsplit);
 }
 
@@ -491,6 +495,31 @@ void MapEditorTab::togglePerspectiveView(bool maximized)
     }
 }
 
+// Saved when moved, not on exit: with one view maximized the hidden ones report no size.
+void MapEditorTab::saveViewSplitters()
+{
+    QSettings s;
+    s.setValue("tabs/map/viewRows", m_rows[0]->saveState());
+    s.setValue("tabs/map/viewColumns", m_vsplit->saveState());
+}
+
+void MapEditorTab::restoreViewLayout()
+{
+    QSettings s;
+    const QByteArray rows = s.value("tabs/map/viewRows").toByteArray();
+    if (!rows.isEmpty())
+    {
+        m_rows[0]->restoreState(rows);
+        m_rows[1]->restoreState(rows);
+    }
+    const QByteArray columns = s.value("tabs/map/viewColumns").toByteArray();
+    if (!columns.isEmpty())
+        m_vsplit->restoreState(columns);
+    const int maximized = s.value("tabs/map/maximizedView", -1).toInt();
+    if (maximized >= 0 && maximized < 4)
+        setMaximizedView(m_views[maximized]);
+}
+
 void MapEditorTab::setMaximizedView(Viewport* view)
 {
     m_maximizedView = view;
@@ -506,6 +535,12 @@ void MapEditorTab::setMaximizedView(Viewport* view)
 
     const QSignalBlocker blocker(m_perspectiveAct);
     m_perspectiveAct->setChecked(m_maximizedView == m_views[0]);
+
+    int index = -1;
+    for (int i = 0; i < 4; ++i)
+        if (m_views[i] == m_maximizedView)
+            index = i;
+    QSettings().setValue("tabs/map/maximizedView", index);
 }
 
 namespace

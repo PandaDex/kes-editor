@@ -103,7 +103,7 @@ namespace
         if (s == "target_destination" || s == "target_name_or_class" || s == "node_dest")
             return PropType::TargetDest;
         if (s == "studio" || s == "model" || s == "sprite" || s == "decal" || s == "material" || s == "sound" ||
-            s == "particlesystem" || s == "scene" || s == "vmat" || s == "vmdl")
+            s == "particlesystem" || s == "scene" || s == "vmat" || s == "vmdl" || s == "animgraph" || s == "animation")
             return PropType::Asset;
         return PropType::String;
     }
@@ -873,4 +873,24 @@ QString EntityRegistry::toDec(const ClassDef &d)
         o << "\toutput " << i.name << "(" << (i.type.isEmpty() ? "void" : i.type) << ") : \"" << i.help << "\"\n";
     o << "]\n";
     return s;
+}
+
+QStringList assetSuffixes(const QString &typeName)
+{
+    const QString t = typeName.toLower();
+    if (t == "studio" || t == "model" || t == "vmdl")
+        return {"kmodel"};
+    if (t == "material" || t == "vmat")
+        return {"mat"};
+    if (t == "sound")
+        return {"ksound"};
+    if (t == "sprite" || t == "decal")
+        return {"png", "jpg", "jpeg", "bmp"};
+    if (t == "particlesystem")
+        return {"kfx"};
+    if (t == "animgraph")
+        return {"ag"};
+    if (t == "animation")
+        return {"kanim"};
+    return {};
 }

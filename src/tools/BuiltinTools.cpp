@@ -1,5 +1,7 @@
 #include "tools/BuiltinTools.h"
 #include "core/EditorContext.h"
+#include "core/ModelCache.h"
+#include "entities/EntityDefs.h"
 #include "render/Batch.h"
 #include "render/Viewport.h"
 #include "ui/KesStyle.h"
@@ -30,6 +32,68 @@ namespace
     const QColor kAxisColors[3] = {QColor(235, 70, 70), QColor(80, 210, 80), QColor(80, 130, 245)};
     const QVector3D kAxisDirs[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
     constexpr float kPi = 3.14159265358979f;
+    constexpr int kUniformHandle = 3; // scale gizmo centre box
+
+    QString formatScaleValue(float v)
+    {
+        return QString::number(double(std::round(v * 10000.f) / 10000.f), 'g', 7);
+    }
+
+    // Point entities don't change size through their origin: scale the class's Scale key instead.
+    // A vector Scale is in model space, so a world axis scales the model axis closest to it.
+    const PropertyDef *scaleProperty(const ClassDef *def)
+    {
+        const PropertyDef *prop = nullptr;
+        if (def)
+            for (const PropertyDef &p : def->props)
+                if (p.key.compare(QLatin1String("Scale"), Qt::CaseInsensitive) == 0)
+                    prop = &p;
+        return prop;
+    }
+
+    void scalePointEntity(MapObject &o, const ClassDef *def, int axis, float factor)
+    {
+        const PropertyDef *prop = scaleProperty(def);
+        if (!prop)
+            return;
+        QString key = prop->key;
+        for (auto it = o.kv.cbegin(); it != o.kv.cend(); ++it)
+            if (it.key().compare(key, Qt::CaseInsensitive) == 0)
+                key = it.key();
+        const QString current = o.kv.value(key, prop->defaultValue).trimmed();
+        if (prop->type == PropType::Float)
+        {
+            bool ok = false;
+            float v = current.toFloat(&ok);
+            o.kv[key] = formatScaleValue((ok ? v : 1.f) * factor);
+            return;
+        }
+        QVector3D s = parseScale(current.isEmpty() ? QStringLiteral("1") : current);
+        if (axis == kUniformHandle)
+        {
+            s *= factor;
+        }
+        else
+        {
+            MapObject unscaled = o;
+            unscaled.origin = {};
+            unscaled.kv.remove(key);
+            const QMatrix4x4 placement = ModelCache::placement(unscaled);
+            int best = 0;
+            float bestDot = -1.f;
+            for (int i = 0; i < 3; ++i)
+            {
+                const float d = std::abs(QVector3D::dotProduct(placement.mapVector(kAxisDirs[i]).normalized(), kAxisDirs[axis]));
+                if (d > bestDot)
+                {
+                    bestDot = d;
+                    best = i;
+                }
+            }
+            s[best] *= factor;
+        }
+        o.kv[key] = QString("%1 %2 %3").arg(formatScaleValue(s.x()), formatScaleValue(s.y()), formatScaleValue(s.z()));
+    }
 
     void gizmoPlaneBasis(int axis, QVector3D &u, QVector3D &v)
     {
@@ -97,14 +161,36 @@ void SelectTool::deactivate()
     cancelDrag();
 }
 
-AABB SelectTool::solidSelectionBounds() const
+bool SelectTool::hasHandles(const MapObject &o) const
+{
+    if (o.solid)
+        return true;
+    return !o.classname.isEmpty() && scaleProperty(m_ctx->registry()->resolved(o.classname));
+}
+
+AABB SelectTool::handleBounds(const MapObject &o) const
+{
+    if (!o.solid)
+    {
+        const ClassDef *def = o.classname.isEmpty() ? nullptr : m_ctx->registry()->resolved(o.classname);
+        if (const ModelAsset *model = m_ctx->models()->find(objectValue(o, "Model", def ? def->model : QString()).trimmed()))
+        {
+            const AABB b = ModelCache::worldBounds(*model, ModelCache::placement(o));
+            if (b.valid())
+                return b;
+        }
+    }
+    return o.worldBounds();
+}
+
+AABB SelectTool::handleSelectionBounds() const
 {
     AABB b;
     for (ObjectId id : m_ctx->doc()->selection())
     {
         const MapObject *o = m_ctx->doc()->find(id);
-        if (o && o->solid && m_ctx->doc()->isVisible(*o))
-            b.expand(o->worldBounds());
+        if (o && m_ctx->doc()->isVisible(*o) && hasHandles(*o))
+            b.expand(handleBounds(*o));
     }
     return b;
 }
@@ -128,7 +214,7 @@ QPointF SelectTool::handleScreenPos(Viewport *vp, int idx, const AABB &b, QVecto
 
 int SelectTool::hitHandle(Viewport *vp, const QPointF &p) const
 {
-    const AABB b = solidSelectionBounds();
+    const AABB b = handleSelectionBounds();
     if (!vp->isOrtho() || !b.valid())
         return -1;
     for (int i = 0; i < 9; ++i)
@@ -202,6 +288,12 @@ int SelectTool::hitGizmo(Viewport *vp, const QPointF &p) const
         return -1;
     const QVector3D c = m_ctx->doc()->selectionBounds().center();
     const float L = gizmoLength(vp, c);
+    if (m_gizmoMode == GizmoMode::Scale)
+    {
+        QPointF centre;
+        if (vp->camera().project(c, centre) && std::abs(centre.x() - p.x()) <= 9 && std::abs(centre.y() - p.y()) <= 9)
+            return kUniformHandle;
+    }
     if (m_gizmoMode == GizmoMode::Rotate)
     {
         int best = -1;
@@ -326,8 +418,38 @@ void SelectTool::applyResize(Viewport *vp, const QPointF &p)
     QVector<MapObject> after = m_before;
     for (MapObject &o : after)
     {
-        if (!o.solid)
+        if (!hasHandles(o))
             continue;
+        if (!o.solid)
+        {
+            const ClassDef *def = m_ctx->registry()->resolved(o.classname);
+            float factors[2] = {1.f, 1.f};
+            for (int i = 0; i < 2; ++i)
+            {
+                const int axis = i == 0 ? h : v;
+                const float oldS = m_startBounds.mx[axis] - m_startBounds.mn[axis];
+                if (oldS < 1e-4f)
+                    continue;
+                const float newS = nb.mx[axis] - nb.mn[axis];
+                o.origin[axis] = nb.mn[axis] + (o.origin[axis] - m_startBounds.mn[axis]) / oldS * newS;
+                factors[i] = newS / oldS;
+            }
+            const PropertyDef *prop = scaleProperty(def);
+            if (prop && prop->type == PropType::Float)
+            {
+                // a single number can't stretch one axis: use the larger change
+                const float f = std::abs(factors[0] - 1.f) >= std::abs(factors[1] - 1.f) ? factors[0] : factors[1];
+                if (std::abs(f - 1.f) > 1e-5f)
+                    scalePointEntity(o, def, kUniformHandle, f);
+            }
+            else
+            {
+                for (int i = 0; i < 2; ++i)
+                    if (std::abs(factors[i] - 1.f) > 1e-5f)
+                        scalePointEntity(o, def, i == 0 ? h : v, factors[i]);
+            }
+            continue;
+        }
         AABB b = o.worldBounds();
         for (int axis : {h, v})
         {
@@ -346,25 +468,47 @@ void SelectTool::applyResize(Viewport *vp, const QPointF &p)
     m_ctx->doc()->previewReplace(after);
 }
 
-void SelectTool::applyScale(float delta)
+float SelectTool::axisScaleFactor(float delta) const
 {
-    const float length = gizmoLength(m_vp, m_gizmoCenter);
-    float factor = std::max(0.05f, 1.f + delta / length);
-    // Keep the selection's size on the grid along the scaled axis.
-    const AABB start = [this]
-    { AABB b; for (const MapObject &o : m_before) b.expand(o.worldBounds()); return b; }();
-    const float size = start.size()[m_axis];
-    if (m_ctx->snapEnabled() && size > 1e-3f)
-        factor = std::max(float(m_ctx->gridSize()), m_ctx->snap(size * factor)) / size;
-    QVector3D s(1, 1, 1);
-    s[m_axis] = factor;
+    float factor = std::max(0.05f, 1.f + delta / gizmoLength(m_vp, m_gizmoCenter));
+    if (!m_ctx->snapEnabled())
+        return factor;
+    // Keep solids' size on the grid along the scaled axis (the largest one for uniform scale);
+    // point entities alone snap to 0.1 steps.
+    AABB solids;
+    for (const MapObject &o : m_before)
+        if (o.solid)
+            solids.expand(o.worldBounds());
+    if (solids.valid())
+    {
+        const QVector3D size = solids.size();
+        const float s = m_axis < 3 ? size[m_axis] : std::max({size.x(), size.y(), size.z()});
+        if (s > 1e-3f)
+            return std::max(float(m_ctx->gridSize()), m_ctx->snap(s * factor)) / s;
+    }
+    return std::max(0.1f, std::round(factor * 10.f) / 10.f);
+}
+
+void SelectTool::applyScale(float factor)
+{
+    m_scaleFactor = factor;
+    QVector3D s(factor, factor, factor);
+    if (m_axis < 3)
+    {
+        s = QVector3D(1, 1, 1);
+        s[m_axis] = factor;
+    }
     QMatrix4x4 m;
     m.translate(m_gizmoCenter);
     m.scale(s);
     m.translate(-m_gizmoCenter);
     QVector<MapObject> after = m_before;
     for (MapObject &o : after)
-        o.transformWorld(m); // point entities only move; their box comes from the class
+    {
+        o.transformWorld(m);
+        if (!o.solid)
+            scalePointEntity(o, o.classname.isEmpty() ? nullptr : m_ctx->registry()->resolved(o.classname), m_axis, factor);
+    }
     m_ctx->doc()->previewReplace(after);
 }
 
@@ -417,7 +561,7 @@ void SelectTool::mousePress(Viewport *vp, QMouseEvent *e)
         if (h >= 0)
         {
             m_handle = h;
-            m_startBounds = solidSelectionBounds();
+            m_startBounds = handleSelectionBounds();
             captureBefore();
             if (m_rotateHandles)
             {
@@ -440,13 +584,14 @@ void SelectTool::mousePress(Viewport *vp, QMouseEvent *e)
         {
             m_axis = axis;
             m_gizmoCenter = doc->selectionBounds().center();
+            m_scaleFactor = 1.f;
             if (m_gizmoMode == GizmoMode::Rotate)
             {
                 if (!rotationVector(vp, e->position(), m_gizmoCenter, axis, m_rotationStart))
                     return;
                 m_rotationAccumulated = 0.f;
             }
-            else if (!axisParam(vp, e->position(), m_gizmoCenter, axis, m_axisStart))
+            else if (axis != kUniformHandle && !axisParam(vp, e->position(), m_gizmoCenter, axis, m_axisStart))
             {
                 return;
             }
@@ -554,6 +699,11 @@ void SelectTool::mouseMove(Viewport *vp, QMouseEvent *e)
             m_rotationStart = current;
             applyRotation(kAxisDirs[m_axis], m_rotationAccumulated);
         }
+        else if (m_axis == kUniformHandle)
+        {
+            const QPoint drag = m_cur - m_press;
+            applyScale(axisScaleFactor(float(drag.x() - drag.y()) * cam.unitsPerPixel(m_gizmoCenter)));
+        }
         else
         {
             float t;
@@ -563,7 +713,7 @@ void SelectTool::mouseMove(Viewport *vp, QMouseEvent *e)
             if (m_gizmoMode == GizmoMode::Move)
                 applyDelta(kAxisDirs[m_axis] * m_ctx->snap(delta));
             else
-                applyScale(delta);
+                applyScale(axisScaleFactor(delta));
         }
         break;
     }
@@ -606,7 +756,7 @@ void SelectTool::mouseRelease(Viewport *vp, QMouseEvent *e)
     case Mode::Move:
         if (m_moved)
             doc->commitFromPreview(m_before, tr("Move Objects"));
-        else if (m_wasSelected && vp->isOrtho() && solidSelectionBounds().valid())
+        else if (m_wasSelected && vp->isOrtho() && handleSelectionBounds().valid())
             m_rotateHandles = !m_rotateHandles;
         break;
     case Mode::Gizmo:
@@ -720,7 +870,7 @@ void SelectTool::draw(Viewport *vp, Batch &b)
 {
     if (vp->isOrtho())
     {
-        const AABB sb = solidSelectionBounds();
+        const AABB sb = handleSelectionBounds();
         if (!sb.valid())
             return;
         for (int i = 0; i < 9; ++i)
@@ -744,6 +894,12 @@ void SelectTool::draw(Viewport *vp, Batch &b)
     {
         const QVector3D c = m_mode == Mode::Gizmo ? m_gizmoCenter : m_ctx->doc()->selectionBounds().center();
         const float L = gizmoLength(vp, c);
+        if (m_gizmoMode == GizmoMode::Scale)
+        {
+            const float k = L * 0.09f;
+            const bool active = m_mode == Mode::Gizmo && m_axis == kUniformHandle;
+            b.solidBox(AABB(c - QVector3D(k, k, k), c + QVector3D(k, k, k)), active ? QColor(255, 235, 90) : QColor(225, 228, 235), true);
+        }
         for (int i = 0; i < 3; ++i)
         {
             QColor col = kAxisColors[i];
@@ -828,7 +984,8 @@ void SelectTool::paintOverlay(Viewport *vp, QPainter &p)
     }
     if (vp == m_vp && m_moved && (m_mode == Mode::Resize || m_mode == Mode::Rotate2D || m_mode == Mode::Move))
     {
-        const AABB b = m_ctx->doc()->selectionBounds();
+        const AABB handles = handleSelectionBounds();
+        const AABB b = handles.valid() ? handles : m_ctx->doc()->selectionBounds();
         if (b.valid())
         {
             const QVector3D s = b.size();
@@ -838,6 +995,8 @@ void SelectTool::paintOverlay(Viewport *vp, QPainter &p)
             drawLabel(p, QPointF(m_cur) + QPointF(14, 14), text);
         }
     }
+    if (vp == m_vp && m_moved && m_mode == Mode::Gizmo && m_gizmoMode == GizmoMode::Scale)
+        drawLabel(p, QPointF(m_cur) + QPointF(14, 14), QString("x%1").arg(double(m_scaleFactor), 0, 'f', 2));
     if (m_mode == Mode::Marquee && m_moved && vp == m_vp)
     {
         p.setPen(QPen(kOrange, 1, Qt::DashLine));

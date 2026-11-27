@@ -4,6 +4,7 @@
 #include <QMessageBox>
 #include <QSettings>
 #include <QStatusBar>
+#include <QTimer>
 #include <algorithm>
 
 EditorTab::EditorTab(EditorContext* ctx, const QString& moduleId, QWidget* parent)
@@ -38,11 +39,25 @@ bool EditorTab::handlesFile(const QString& path) const
 void EditorTab::restoreLayout()
 {
     const QByteArray state = QSettings().value("tabs/" + m_moduleId + "/state").toByteArray();
-    if (!state.isEmpty()) restoreState(state);
+    if (state.isEmpty()) return;
+    restoreState(state); // dock placement right away, sizes again once shown
+    m_pendingState = state;
+}
+
+void EditorTab::showEvent(QShowEvent* event)
+{
+    QMainWindow::showEvent(event);
+    if (m_pendingState.isEmpty()) return;
+    const QByteArray state = m_pendingState;
+    m_pendingState.clear();
+    restoreState(state);
+    // the shell may still be settling its own size (maximized window, restored docks)
+    QTimer::singleShot(0, this, [this, state] { restoreState(state); });
 }
 
 void EditorTab::saveLayout()
 {
+    if (!m_pendingState.isEmpty()) return; // never shown: the stored layout is still the right one
     QSettings().setValue("tabs/" + m_moduleId + "/state", saveState());
 }
 

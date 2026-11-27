@@ -44,6 +44,8 @@ private:
     void toggleMaximize();
     void togglePerspectiveView(bool maximized);
     void setMaximizedView(Viewport* view);
+    void saveViewSplitters();
+    void restoreViewLayout();
     void buildMap();
     void autosave();
     void checkProblems();

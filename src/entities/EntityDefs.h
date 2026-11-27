@@ -117,3 +117,5 @@ private:
 
 void applyClassDefaults(MapObject &o, const ClassDef &resolvedDef);
 bool isBuiltinKey(const QString &key);
+// File suffixes (no dot) an asset property type accepts; empty = any file.
+QStringList assetSuffixes(const QString &typeName);

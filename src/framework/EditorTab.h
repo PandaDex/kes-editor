@@ -44,8 +44,10 @@ public:
     void setProblems(const ProblemList& problems);
     int problemCount(ProblemSeverity severity) const;
 
-    void restoreLayout();
-    void saveLayout();
+    // Dock layout in QSettings. Restoring is applied once the tab is shown: a nested main window
+    // restored before it has its real size loses the dock sizes on the first resize.
+    virtual void restoreLayout();
+    virtual void saveLayout();
 
 signals:
     void titleChanged();
@@ -55,6 +57,7 @@ signals:
     void showProblemsRequested();
 
 protected:
+    void showEvent(QShowEvent* event) override;
     QMenu* addTabMenu(const QString& title);
     void showStatus(const QString& text, int timeoutMs = 4000);
 
@@ -63,4 +66,5 @@ private:
     QString m_moduleId;
     QList<QMenu*> m_menus;
     ProblemList m_problems;
+    QByteArray m_pendingState;
 };

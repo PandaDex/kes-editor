@@ -7,11 +7,22 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 namespace
 {
 constexpr float kPi = 3.14159265358979f;
-constexpr int kMaxLights = 32;
+constexpr int kMaxDirectionalLights = 4;
+// Clustered point/spot lights, as render_common.h (froxel grid binned on the CPU; the grid
+// starts with one header per cluster, (first index << 8) | count, the light indices follow).
+constexpr int kClusterX = 16;
+constexpr int kClusterY = 9;
+constexpr int kClusterZ = 24;
+constexpr int kClusterCount = kClusterX * kClusterY * kClusterZ;
+constexpr int kMaxClusterLights = 4096;
+constexpr int kMaxClusterIndices = 256 * 1024;
+constexpr quint32 kMaxLightsPerCluster = 255;
+constexpr float kClusterFarMetres = 500.f;
 constexpr int kCascadeCount = 4;       // ShadowQuality::High, the game's default
 constexpr int kCascadeResolution = 2048;
 constexpr int kLocalSlices = 12;
@@ -31,26 +42,35 @@ enum MaterialFlag
     FlagHasEmissive = 128
 };
 
-// std140: vec4/mat4 members only, so the C++ layout matches without padding rules.
+// std140 / std430: vec4/mat4 members only, so the C++ layout matches without padding rules.
+struct GpuLight
+{
+    float position[4];  // w = range
+    float color[4];
+    float direction[4]; // w = spot outer cos
+    float params[4];    // x = type, y = spot inner cos, z = shadow (dir 1, local first slice, -1 none)
+};
+
 struct SceneBlock
 {
     float cameraPosition[4];
     float cameraForward[4];
     float ambientSH[9][4];
     float environmentParams[4]; // x = mip count, y = intensity
-    float lightCounts[4];
-    float lightPosition[kMaxLights][4];  // w = range
-    float lightColor[kMaxLights][4];
-    float lightDirection[kMaxLights][4]; // w = spot outer cos
-    float lightParams[kMaxLights][4];    // x = type, y = spot inner cos, z = shadow (dir 1, local first slice, -1 none)
+    float lightCounts[4];       // x = directional light count
+    GpuLight lights[kMaxDirectionalLights];
     float cascadeViewProj[4][16];
     float cascadeSplits[4];
     float cascadeTexelSize[4];
     float shadowParams[4]; // x = cascades, y = 1/cascade res, z = 1/local res, w = enabled
     float localViewProj[kMaxLocalSlices][16];
+    float clusterParams[4]; // xyz = grid size, w = cluster light count
+    float clusterDepth[4];  // x = near, y = slices / log(far / near)
+    float clusterRight[4];  // xyz = camera right, w = x projection scale
+    float clusterUp[4];     // xyz = camera up, w = y projection scale
 };
 
-const char *kMeshVertex = R"(#version 330 core
+const char *kMeshVertex = R"(#version 430 core
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aNormal;
 layout(location=2) in vec2 aUv;
@@ -103,6 +123,14 @@ uniform sampler2DArrayShadow uCascadeMap;
 uniform sampler2DArrayShadow uLocalMap;
 uniform sampler2D uEnvTable;
 
+struct Light
+{
+    vec4 position;  // w = range
+    vec4 color;
+    vec4 direction; // w = spot outer cos
+    vec4 params;    // x = type, y = spot inner cos, z = shadow
+};
+
 layout(std140) uniform SceneBlock
 {
     vec4 uCameraPos;
@@ -110,16 +138,39 @@ layout(std140) uniform SceneBlock
     vec4 uAmbientSH[9];
     vec4 uEnvParams;
     vec4 uLightCounts;
-    vec4 uLightPos[32];
-    vec4 uLightColor[32];
-    vec4 uLightDir[32];
-    vec4 uLightParams[32];
+    Light uLights[4];
     mat4 uCascadeViewProj[4];
     vec4 uCascadeSplits;
     vec4 uCascadeTexel;
     vec4 uShadowParams;
     mat4 uLocalViewProj[16];
+    vec4 uClusterParams;
+    vec4 uClusterDepth;
+    vec4 uClusterRight;
+    vec4 uClusterUp;
 };
+
+layout(std430, binding = 1) readonly buffer ClusterLights { Light uClusterLights[]; };
+layout(std430, binding = 2) readonly buffer ClusterGrid { uint uClusterGrid[]; };
+
+// Same view-space math as the CPU binning in MaterialRenderer::prepareLit.
+uint clusterHeader(vec3 worldPos)
+{
+    ivec3 dims = ivec3(uClusterParams.xyz);
+    vec3 d = worldPos - uCameraPos.xyz;
+    float viewZ = max(dot(d, uCameraForward.xyz), uClusterDepth.x);
+    float nx = dot(d, uClusterRight.xyz) * uClusterRight.w / viewZ;
+    float ny = dot(d, uClusterUp.xyz) * uClusterUp.w / viewZ;
+    int x = clamp(int(floor((nx * 0.5 + 0.5) * dims.x)), 0, dims.x - 1);
+    int y = clamp(int(floor((ny * 0.5 + 0.5) * dims.y)), 0, dims.y - 1);
+    int z = clamp(int(floor(log(viewZ / uClusterDepth.x) * uClusterDepth.y)), 0, dims.z - 1);
+    return uClusterGrid[(z * dims.y + y) * dims.x + x];
+}
+uint clusterLightIndex(uint header, uint i)
+{
+    ivec3 dims = ivec3(uClusterParams.xyz);
+    return uClusterGrid[uint(dims.x * dims.y * dims.z) + (header >> 8) + i];
+}
 
 const float kPi = 3.14159265;
 bool has(int flag) { return (uFlags & flag) != 0; }
@@ -199,11 +250,11 @@ float cascadeShadow(vec3 worldPos, vec3 geometricNormal)
         return 1.0;
     return shadowPCF(uCascadeMap, uv, float(cascade), depth - 0.0005, uShadowParams.y);
 }
-float localShadow(int i, vec3 worldPos, vec3 geometricNormal)
+float localShadow(Light light, vec3 worldPos, vec3 geometricNormal)
 {
-    float slice = uLightParams[i].z;
-    vec3 fromLight = worldPos - uLightPos[i].xyz;
-    if (uLightParams[i].x < 1.5)
+    float slice = light.params.z;
+    vec3 fromLight = worldPos - light.position.xyz;
+    if (light.params.x < 1.5)
     {
         vec3 a = abs(fromLight);
         slice += a.x >= a.y && a.x >= a.z ? (fromLight.x >= 0.0 ? 0.0 : 1.0)
@@ -221,6 +272,43 @@ float localShadow(int i, vec3 worldPos, vec3 geometricNormal)
     if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0))) || depth > 1.0)
         return 1.0;
     return shadowPCF(uLocalMap, uv, slice, depth - 0.00005, uShadowParams.z);
+}
+
+// KesDirectLight: GGX specular + Lambert diffuse with the light's shadow.
+vec3 directLight(Light light, vec3 worldPos, vec3 geometricNormal, vec3 n, vec3 v, float NoV, float a, vec3 f0,
+                 vec3 diffuseColor)
+{
+    vec3 l;
+    float attenuation = 1.0;
+    if (light.params.x < 0.5)
+    {
+        l = -normalize(light.direction.xyz);
+    }
+    else
+    {
+        vec3 toLight = light.position.xyz - worldPos;
+        float dist = length(toLight);
+        if (dist >= light.position.w)
+            return vec3(0.0);
+        l = toLight / max(dist, 0.0001);
+        float x = dist / light.position.w;
+        float window = clamp(1.0 - x * x * x * x, 0.0, 1.0);
+        attenuation = window * window / (1.0 + 4.0 * x * x);
+        if (light.params.x > 1.5)
+            attenuation *= smoothstep(light.direction.w, light.params.y, dot(-l, normalize(light.direction.xyz)));
+    }
+    float NoL = dot(n, l);
+    if (NoL <= 0.0 || attenuation <= 0.0)
+        return vec3(0.0);
+    if (uShadowParams.w > 0.5 && light.params.z >= 0.0)
+        attenuation *= light.params.x < 0.5 ? cascadeShadow(worldPos, geometricNormal) : localShadow(light, worldPos, geometricNormal);
+    vec3 h = normalize(v + l);
+    float NoH = clamp(dot(n, h), 0.0, 1.0);
+    float VoH = clamp(dot(v, h), 0.0, 1.0);
+    vec3 f = fresnelSchlick(f0, VoH);
+    vec3 specular = distributionGGX(NoH, a) * visibilitySmithGGX(NoV, NoL, a) * f;
+    vec3 diffuse = (1.0 - f) * diffuseColor / kPi;
+    return (diffuse + specular) * light.color.rgb * (NoL * attenuation);
 }
 
 // KesPerturbNormal in engine space with D3D's screen-space y (ddy points down).
@@ -297,37 +385,14 @@ void main()
         vec3 direct = vec3(0.0);
         int lightCount = int(uLightCounts.x);
         for (int i = 0; i < lightCount; i++)
+            direct += directLight(uLights[i], vPos, geometricNormal, n, v, NoV, a, f0, diffuseColor);
+        if (uClusterParams.w > 0.5)
         {
-            vec3 l;
-            float attenuation = 1.0;
-            if (uLightParams[i].x < 0.5)
-            {
-                l = -normalize(uLightDir[i].xyz);
-            }
-            else
-            {
-                vec3 toLight = uLightPos[i].xyz - vPos;
-                float dist = length(toLight);
-                l = toLight / max(dist, 0.0001);
-                float x = dist / uLightPos[i].w;
-                float window = clamp(1.0 - x * x * x * x, 0.0, 1.0);
-                attenuation = window * window / (1.0 + 4.0 * x * x);
-                if (uLightParams[i].x > 1.5)
-                    attenuation *= smoothstep(uLightDir[i].w, uLightParams[i].y, dot(-l, normalize(uLightDir[i].xyz)));
-            }
-            float NoL = dot(n, l);
-            if (NoL <= 0.0 || attenuation <= 0.0)
-                continue;
-            float shadow = 1.0;
-            if (uShadowParams.w > 0.5 && uLightParams[i].z >= 0.0)
-                shadow = uLightParams[i].x < 0.5 ? cascadeShadow(vPos, geometricNormal) : localShadow(i, vPos, geometricNormal);
-            vec3 h = normalize(v + l);
-            float NoH = clamp(dot(n, h), 0.0, 1.0);
-            float VoH = clamp(dot(v, h), 0.0, 1.0);
-            vec3 f = fresnelSchlick(f0, VoH);
-            vec3 specular = distributionGGX(NoH, a) * visibilitySmithGGX(NoV, NoL, a) * f;
-            vec3 diffuse = (1.0 - f) * diffuseColor / kPi;
-            direct += (diffuse + specular) * uLightColor[i].rgb * (NoL * attenuation * shadow);
+            uint header = clusterHeader(vPos);
+            uint count = header & 0xFFu;
+            for (uint ci = 0u; ci < count; ci++)
+                direct += directLight(uClusterLights[clusterLightIndex(header, ci)], vPos, geometricNormal, n, v, NoV, a, f0,
+                                      diffuseColor);
         }
         vec3 r = reflect(-v, n);
         vec3 prefiltered = prefilteredRadiance(r.z, roughness);
@@ -483,9 +548,8 @@ GLuint createShadowArray(QOpenGLExtraFunctions *gl, int resolution, int layers)
 bool MaterialRenderer::initialize(QString *log)
 {
     initializeOpenGLFunctions();
-    const QByteArray header = "#version 330 core\n";
-    const QByteArray meshFragment = header + kColourFunctions + kMeshFragment;
-    const QByteArray skyFragment = header + kColourFunctions + kSkyFragment;
+    const QByteArray meshFragment = QByteArray("#version 430 core\n") + kColourFunctions + kMeshFragment;
+    const QByteArray skyFragment = QByteArray("#version 330 core\n") + kColourFunctions + kSkyFragment;
     bool ok = true;
     auto build = [&](QOpenGLShaderProgram &program, const char *vertex, const QByteArray &fragment, const char *name)
     {
@@ -522,6 +586,14 @@ bool MaterialRenderer::initialize(QString *log)
     glBindBuffer(GL_UNIFORM_BUFFER, m_sceneBlock);
     glBufferData(GL_UNIFORM_BUFFER, sizeof(SceneBlock), nullptr, GL_DYNAMIC_DRAW);
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    glGenBuffers(1, &m_clusterLights);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_clusterLights);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, GLsizeiptr(sizeof(GpuLight)) * kMaxClusterLights, nullptr, GL_DYNAMIC_DRAW);
+    glGenBuffers(1, &m_clusterGrid);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_clusterGrid);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, GLsizeiptr(sizeof(quint32)) * (kClusterCount + kMaxClusterIndices), nullptr,
+                 GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
     m_ready = true;
     return true;
 }
@@ -534,9 +606,10 @@ void MaterialRenderer::release()
         const GLuint textures[] = {m_cascadeMap, m_localMap, m_envTexture};
         glDeleteTextures(3, textures);
         glDeleteFramebuffers(1, &m_shadowFbo);
-        glDeleteBuffers(1, &m_sceneBlock);
+        const GLuint buffers[] = {m_sceneBlock, m_clusterLights, m_clusterGrid};
+        glDeleteBuffers(3, buffers);
     }
-    m_cascadeMap = m_localMap = m_envTexture = m_shadowFbo = m_sceneBlock = 0;
+    m_cascadeMap = m_localMap = m_envTexture = m_shadowFbo = m_sceneBlock = m_clusterLights = m_clusterGrid = 0;
     m_envUploaded = 0;
     m_vbo.destroy();
     m_shadowVao.destroy();
@@ -701,42 +774,129 @@ void MaterialRenderer::prepareLit(const MapDocument &doc, const Camera &cam, Mat
     block.environmentParams[0] = float(LitEnvironment::kMipCount);
     block.environmentParams[1] = 1.f;
 
-    // Directional lights first, then local lights nearest first (BuildFrameSetup).
-    QVector<const LitLight *> order;
-    for (const LitLight &light : scene.lights)
-        order.push_back(&light);
-    auto score = [&](const LitLight *l)
-    { return l->type == LitLight::Directional ? -1e30f : (l->position - eye).length() - l->range; };
-    std::stable_sort(order.begin(), order.end(), [&](const LitLight *a, const LitLight *b) { return score(a) < score(b); });
-    if (order.size() > kMaxLights)
-        order.resize(kMaxLights);
-
     const float aspect = float(std::max(1, cam.size.width())) / float(std::max(1, cam.size.height()));
     const float vfov = std::min(2.f * std::atan(std::tan(cam.fovH * kPi / 360.f) / aspect), 150.f * kPi / 180.f);
     const float tanHalf = std::tan(vfov * 0.5f);
 
+    // Cluster grid in view space (right, up, forward); the shader's clusterHeader does the same math.
+    const float clusterNear = kCameraNearMetres * metre;
+    const float clusterFar = kClusterFarMetres * metre;
+    const float sliceScale = float(kClusterZ) / std::log(clusterFar / clusterNear);
+    const float yScale = 1.f / tanHalf;
+    const float xScale = yScale / aspect;
+    struct ClusterRange
+    {
+        int x0, x1, y0, y1, z0, z1;
+    };
+    // False when the sphere can't touch the view.
+    auto clusterRange = [&](const QVector3D &center, float radius, ClusterRange &out)
+    {
+        const QVector3D d = center - eye;
+        const float vx = QVector3D::dotProduct(d, right);
+        const float vy = QVector3D::dotProduct(d, up);
+        const float vz = QVector3D::dotProduct(d, forward);
+        if (vz + radius < clusterNear)
+            return false;
+        const float zMin = std::max(vz - radius, clusterNear);
+        const float zMax = vz + radius;
+        float nx0 = 1e30f, nx1 = -1e30f, ny0 = 1e30f, ny1 = -1e30f;
+        for (float z : {zMin, zMax})
+            for (float sign : {-1.f, 1.f})
+            {
+                const float x = (vx + sign * radius) * xScale / z;
+                const float y = (vy + sign * radius) * yScale / z;
+                nx0 = std::min(nx0, x);
+                nx1 = std::max(nx1, x);
+                ny0 = std::min(ny0, y);
+                ny1 = std::max(ny1, y);
+            }
+        if (nx1 < -1.f || nx0 > 1.f || ny1 < -1.f || ny0 > 1.f)
+            return false;
+        auto tile = [](float ndc, int count)
+        { return std::clamp(int(std::floor((ndc * 0.5f + 0.5f) * float(count))), 0, count - 1); };
+        auto slice = [&](float z)
+        { return std::clamp(int(std::floor(std::log(std::max(z, clusterNear) / clusterNear) * sliceScale)), 0, kClusterZ - 1); };
+        out = {tile(nx0, kClusterX), tile(nx1, kClusterX), tile(ny0, kClusterY), tile(ny1, kClusterY), slice(zMin), slice(zMax)};
+        return true;
+    };
+
+    // Directional lights into the block in map order, visible local lights into the clusters
+    // nearest first (BuildFrameSetup). Spots are bounded by their cone + cap sphere when smaller.
+    struct Candidate
+    {
+        const LitLight *light = nullptr;
+        float score = 0.f;
+        ClusterRange range = {};
+    };
+    QVector<Candidate> candidates;
+    candidates.reserve(scene.lights.size());
+    for (const LitLight &light : scene.lights)
+    {
+        if (light.type == LitLight::Directional)
+        {
+            candidates.push_back({&light, -1e30f, {}});
+            continue;
+        }
+        QVector3D center = light.position;
+        float radius = std::max(light.range, 0.01f * metre);
+        if (light.type == LitLight::Spot)
+        {
+            const float cosHalf = std::cos(std::clamp(light.spotAngle, 1.f, 179.f) * 0.5f * kPi / 180.f);
+            const float coneRadius = radius / (2.f * cosHalf);
+            if (coneRadius < radius)
+            {
+                center = light.position + light.direction.normalized() * coneRadius;
+                radius = coneRadius;
+            }
+        }
+        Candidate candidate{&light, (center - eye).length() - radius, {}};
+        if (clusterRange(center, radius, candidate.range))
+            candidates.push_back(candidate);
+    }
+    std::stable_sort(candidates.begin(), candidates.end(), [](const Candidate &a, const Candidate &b) { return a.score < b.score; });
+
+    std::vector<GpuLight> clusterLights;
+    std::vector<ClusterRange> ranges;
+    clusterLights.reserve(std::min<size_t>(size_t(candidates.size()), kMaxClusterLights));
+    ranges.reserve(clusterLights.capacity());
     QVector<ShadowView> views;
     bool sunAssigned = false;
     int nextLocalSlice = 0;
     int lightCount = 0;
-    for (const LitLight *light : order)
+    for (const Candidate &candidate : candidates)
     {
-        const int i = lightCount++;
+        const LitLight *light = candidate.light;
+        GpuLight *slot = nullptr;
+        if (light->type == LitLight::Directional)
+        {
+            if (lightCount >= kMaxDirectionalLights)
+                continue;
+            slot = &block.lights[lightCount++];
+        }
+        else
+        {
+            if (clusterLights.size() >= size_t(kMaxClusterLights))
+                break;
+            clusterLights.push_back({});
+            ranges.push_back(candidate.range);
+            slot = &clusterLights.back();
+        }
+        GpuLight &gpu = *slot;
         const float halfAngle = std::clamp(light->spotAngle, 1.f, 179.f) * 0.5f * kPi / 180.f;
-        block.lightPosition[i][0] = light->position.x();
-        block.lightPosition[i][1] = light->position.y();
-        block.lightPosition[i][2] = light->position.z();
-        block.lightPosition[i][3] = light->range;
-        block.lightColor[i][0] = light->radiance.x();
-        block.lightColor[i][1] = light->radiance.y();
-        block.lightColor[i][2] = light->radiance.z();
-        block.lightDirection[i][0] = light->direction.x();
-        block.lightDirection[i][1] = light->direction.y();
-        block.lightDirection[i][2] = light->direction.z();
-        block.lightDirection[i][3] = std::cos(halfAngle);
-        block.lightParams[i][0] = float(light->type);
-        block.lightParams[i][1] = std::cos(halfAngle * 0.75f);
-        block.lightParams[i][2] = -1.f;
+        gpu.position[0] = light->position.x();
+        gpu.position[1] = light->position.y();
+        gpu.position[2] = light->position.z();
+        gpu.position[3] = light->range;
+        gpu.color[0] = light->radiance.x();
+        gpu.color[1] = light->radiance.y();
+        gpu.color[2] = light->radiance.z();
+        gpu.direction[0] = light->direction.x();
+        gpu.direction[1] = light->direction.y();
+        gpu.direction[2] = light->direction.z();
+        gpu.direction[3] = std::cos(halfAngle);
+        gpu.params[0] = float(light->type);
+        gpu.params[1] = std::cos(halfAngle * 0.75f);
+        gpu.params[2] = -1.f;
         if (!light->castShadows)
             continue;
 
@@ -745,7 +905,7 @@ void MaterialRenderer::prepareLit(const MapDocument &doc, const Camera &cam, Mat
             if (sunAssigned)
                 continue;
             sunAssigned = true;
-            block.lightParams[i][2] = 1.f;
+            gpu.params[2] = 1.f;
             const float nearPlane = kCameraNearMetres * metre;
             const float farPlane = kShadowDistanceMetres * metre;
             float splits[kCascadeCount + 1] = {nearPlane};
@@ -777,7 +937,7 @@ void MaterialRenderer::prepareLit(const MapDocument &doc, const Camera &cam, Mat
         const int needed = light->type == LitLight::Point ? 6 : 1;
         if (nextLocalSlice + needed > kLocalSlices)
             continue;
-        block.lightParams[i][2] = float(nextLocalSlice);
+        gpu.params[2] = float(nextLocalSlice);
         const float range = std::max(light->range, 0.1f * metre);
         const float zn = std::max(0.05f * metre, range * 0.002f);
         if (light->type == LitLight::Spot)
@@ -812,6 +972,65 @@ void MaterialRenderer::prepareLit(const MapDocument &doc, const Camera &cam, Mat
         nextLocalSlice += needed;
     }
     block.lightCounts[0] = float(lightCount);
+
+    // Bin the cluster lights: count, reserve each cluster's index range, fill.
+    std::vector<quint32> grid(size_t(kClusterCount), 0u);
+    if (!clusterLights.empty())
+    {
+        std::vector<quint32> counts(size_t(kClusterCount), 0u);
+        for (const ClusterRange &r : ranges)
+            for (int z = r.z0; z <= r.z1; ++z)
+                for (int y = r.y0; y <= r.y1; ++y)
+                    for (int x = r.x0; x <= r.x1; ++x)
+                    {
+                        quint32 &count = counts[size_t((z * kClusterY + y) * kClusterX + x)];
+                        count = std::min(count + 1u, kMaxLightsPerCluster);
+                    }
+        quint32 offset = 0;
+        for (int c = 0; c < kClusterCount; ++c)
+        {
+            quint32 count = std::min(counts[size_t(c)], quint32(kMaxClusterIndices) - offset);
+            grid[size_t(c)] = offset << 8;
+            counts[size_t(c)] = count;
+            offset += count;
+        }
+        grid.resize(size_t(kClusterCount) + offset, 0u);
+        for (quint32 li = 0; li < quint32(ranges.size()); ++li)
+        {
+            const ClusterRange &r = ranges[li];
+            for (int z = r.z0; z <= r.z1; ++z)
+                for (int y = r.y0; y <= r.y1; ++y)
+                    for (int x = r.x0; x <= r.x1; ++x)
+                    {
+                        const size_t c = size_t((z * kClusterY + y) * kClusterX + x);
+                        const quint32 filled = grid[c] & 0xFFu;
+                        if (filled >= counts[c])
+                            continue;
+                        grid[size_t(kClusterCount) + (grid[c] >> 8) + filled] = li;
+                        grid[c] += 1u;
+                    }
+        }
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_clusterLights);
+        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, GLsizeiptr(clusterLights.size() * sizeof(GpuLight)), clusterLights.data());
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_clusterGrid);
+        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, GLsizeiptr(grid.size() * sizeof(quint32)), grid.data());
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+    }
+    const QVector3D clusterSpaces[2] = {right, up};
+    for (int axis = 0; axis < 2; ++axis)
+    {
+        float *out = axis == 0 ? block.clusterRight : block.clusterUp;
+        out[0] = clusterSpaces[axis].x();
+        out[1] = clusterSpaces[axis].y();
+        out[2] = clusterSpaces[axis].z();
+        out[3] = axis == 0 ? xScale : yScale;
+    }
+    block.clusterParams[0] = float(kClusterX);
+    block.clusterParams[1] = float(kClusterY);
+    block.clusterParams[2] = float(kClusterZ);
+    block.clusterParams[3] = float(clusterLights.size());
+    block.clusterDepth[0] = clusterNear;
+    block.clusterDepth[1] = sliceScale;
     block.shadowParams[1] = 1.f / float(kCascadeResolution);
     block.shadowParams[2] = 1.f / float(kLocalResolution);
     block.shadowParams[3] = views.isEmpty() ? 0.f : 1.f;
@@ -861,6 +1080,8 @@ void MaterialRenderer::draw(ShadingMode mode, const Camera &cam, MaterialLibrary
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_sceneBlock);
     if (lit)
     {
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_clusterLights);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_clusterGrid);
         glActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_2D_ARRAY, m_cascadeMap);
         glActiveTexture(GL_TEXTURE6);

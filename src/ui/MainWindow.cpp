@@ -3,10 +3,12 @@
 #include "assets/AssetImporter.h"
 #include "assets/AssetTemplates.h"
 #include "core/EditorContext.h"
+#include "framework/EditorSettings.h"
 #include "framework/EditorTab.h"
 #include "modules/map/MapEditorTab.h"
 #include "ui/AssetBrowser.h"
 #include "ui/BrandDialogs.h"
+#include "ui/EditorSettingsDialog.h"
 #include "ui/KesStyle.h"
 #include "ui/ProblemsPanel.h"
 #include "ui/ProjectSettingsDialog.h"
@@ -89,8 +91,14 @@ MainWindow::MainWindow()
             .arg(m_ctx->registry()->classes(ClassKind::Point).size())
             .arg(m_ctx->registry()->classes(ClassKind::Solid).size()));
 
+    connect(m_ctx->doc(), &MapDocument::pathChanged, this, [this]
+        { editorSettings::setLastMap(projectKey(), m_ctx->doc()->filePath()); });
+
     if (m_ctx->project().isValid())
+    {
         m_ctx->log(tr("Project: %1 (%2)").arg(m_ctx->project().name, m_ctx->project().filePath));
+        QTimer::singleShot(0, this, &MainWindow::openStartupMap); // after a map given on the command line
+    }
     else
         QTimer::singleShot(0, this, &MainWindow::promptForProject); // once the window is visible
 }
@@ -156,6 +164,8 @@ void MainWindow::createFileMenu()
         { if (m_ctx->project().isValid()) ProjectSettingsDialog(m_ctx, this).exec(); });
     m_projectSettingsAct->setToolTip(tr("Edit the name, version, company and startup map in the .kproject"));
     m_projectSettingsAct->setEnabled(m_ctx->project().isValid());
+    m_fileMenu->addAction(tr("&Editor Settings..."), this, [this]
+        { EditorSettingsDialog(this).exec(); });
     QAction* contentAct = m_fileMenu->addAction(tr("Set &Content Directory..."), this, &MainWindow::chooseContentDir);
     contentAct->setToolTip(tr("Use a bare content folder instead of a .kproject"));
     m_fileMenu->addSeparator();
@@ -561,7 +571,34 @@ bool MainWindow::openProject(const QString& path)
     const KesProject& p = m_ctx->project();
     m_ctx->log(tr("Project: %1 - content %2, maps %3, materials %4, textures %5")
             .arg(p.name, p.assetRoot, p.mapsDir, p.materialsDir, p.texturesDir));
+    if (!m_ctx->doc()->isModified())
+    {
+        m_ctx->doc()->clear(); // the old project's map
+        openStartupMap();
+    }
     return true;
+}
+
+QString MainWindow::projectKey() const
+{
+    return m_ctx->project().isValid() ? m_ctx->project().filePath : m_ctx->projectDir();
+}
+
+void MainWindow::openStartupMap()
+{
+    if (!m_ctx->doc()->filePath().isEmpty())
+        return;
+    QString path;
+    if (editorSettings::startupMap() == editorSettings::StartupMap::LastOpened)
+    {
+        path = editorSettings::lastMap(projectKey());
+        if (!path.isEmpty() && !QFileInfo::exists(path))
+            path.clear();
+    }
+    if (path.isEmpty())
+        path = editorSettings::projectDefaultMap(m_ctx->project());
+    if (!path.isEmpty())
+        openFile(path);
 }
 
 void MainWindow::promptForProject()

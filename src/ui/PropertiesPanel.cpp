@@ -1,6 +1,7 @@
 #include "ui/PropertiesPanel.h"
 #include "core/EditorContext.h"
 #include "core/ModelCache.h"
+#include "entities/EntityDefs.h"
 #include "ui/AssetDrag.h"
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -8,6 +9,12 @@
 #include <QColorDialog>
 #include <QComboBox>
 #include <QDir>
+#include <QDirIterator>
+#include <QDoubleValidator>
+#include <QFrame>
+#include <QIntValidator>
+#include <QKeyEvent>
+#include <QListWidget>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -29,6 +36,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <algorithm>
+#include <array>
 #include <limits>
 
 namespace
@@ -54,6 +62,133 @@ namespace
             out = float(v);
         return ok;
     }
+
+    QString formatValue(float v)
+    {
+        const QString s = QString::number(double(std::round(v * 10000.f) / 10000.f), 'g', 7);
+        return s == "-0" ? QString("0") : s;
+    }
+
+    // Unfocused spin boxes and combos pass the wheel on, so scrolling the panel doesn't edit values.
+    class WheelGuard : public QObject
+    {
+    public:
+        using QObject::QObject;
+
+    protected:
+        bool eventFilter(QObject *watched, QEvent *event) override
+        {
+            auto *w = qobject_cast<QWidget *>(watched);
+            if (event->type() == QEvent::Wheel && w && !w->hasFocus() && w->parentWidget())
+            {
+                QCoreApplication::sendEvent(w->parentWidget(), event);
+                return true;
+            }
+            return QObject::eventFilter(watched, event);
+        }
+    };
+
+    class AssetPicker : public QFrame
+    {
+    public:
+        AssetPicker(const QString &root, const QStringList &suffixes, const QString &current,
+                    std::function<void(const QString &)> onPick, QWidget *parent)
+            : QFrame(parent, Qt::Popup), m_onPick(std::move(onPick))
+        {
+            setAttribute(Qt::WA_DeleteOnClose);
+            setFrameShape(QFrame::StyledPanel);
+            auto *lay = new QVBoxLayout(this);
+            lay->setContentsMargins(4, 4, 4, 4);
+            lay->setSpacing(4);
+            m_search = new QLineEdit(this);
+            m_search->setPlaceholderText(QObject::tr("Search"));
+            m_search->setClearButtonEnabled(true);
+            m_search->installEventFilter(this);
+            m_list = new QListWidget(this);
+            lay->addWidget(m_search);
+            lay->addWidget(m_list, 1);
+
+            auto *none = new QListWidgetItem(QObject::tr("(None)"), m_list);
+            none->setData(Qt::UserRole, QString());
+            QStringList filters;
+            for (const QString &suffix : suffixes)
+                filters << "*." + suffix;
+            QStringList paths;
+            const QDir dir(root);
+            QDirIterator it(root, filters, QDir::Files, QDirIterator::Subdirectories);
+            while (it.hasNext())
+                paths << dir.relativeFilePath(it.next()).replace('\\', '/');
+            paths.sort(Qt::CaseInsensitive);
+            for (const QString &path : paths)
+            {
+                auto *item = new QListWidgetItem(path, m_list);
+                item->setData(Qt::UserRole, path);
+                item->setToolTip(path);
+                if (path.compare(current, Qt::CaseInsensitive) == 0)
+                    m_list->setCurrentItem(item);
+            }
+            if (!m_list->currentItem())
+                m_list->setCurrentRow(0);
+
+            connect(m_search, &QLineEdit::textChanged, this, [this](const QString &text)
+                    {
+                QListWidgetItem *first = nullptr;
+                for (int i = 1; i < m_list->count(); ++i)
+                {
+                    QListWidgetItem *item = m_list->item(i);
+                    const bool match = item->text().contains(text, Qt::CaseInsensitive);
+                    item->setHidden(!match);
+                    if (match && !first)
+                        first = item;
+                }
+                m_list->item(0)->setHidden(!text.isEmpty());
+                m_list->setCurrentItem(text.isEmpty() ? m_list->item(0) : first); });
+            connect(m_search, &QLineEdit::returnPressed, this, [this]
+                    { if (QListWidgetItem *item = m_list->currentItem(); item && !item->isHidden()) pick(item); });
+            connect(m_list, &QListWidget::itemClicked, this, [this](QListWidgetItem *item)
+                    { pick(item); });
+            connect(m_list, &QListWidget::itemActivated, this, [this](QListWidgetItem *item)
+                    { pick(item); });
+        }
+
+        void popup(QWidget *anchor)
+        {
+            resize(std::max(anchor->width(), 320), 320);
+            move(anchor->mapToGlobal(QPoint(0, anchor->height())));
+            show();
+            m_search->setFocus();
+            if (m_list->currentItem())
+                m_list->scrollToItem(m_list->currentItem(), QAbstractItemView::PositionAtCenter);
+        }
+
+    protected:
+        bool eventFilter(QObject *watched, QEvent *event) override
+        {
+            if (watched == m_search && event->type() == QEvent::KeyPress)
+            {
+                const int key = static_cast<QKeyEvent *>(event)->key();
+                if (key == Qt::Key_Down || key == Qt::Key_Up || key == Qt::Key_PageDown || key == Qt::Key_PageUp)
+                {
+                    QCoreApplication::sendEvent(m_list, event);
+                    return true;
+                }
+            }
+            return QFrame::eventFilter(watched, event);
+        }
+
+    private:
+        void pick(QListWidgetItem *item)
+        {
+            const QString path = item->data(Qt::UserRole).toString();
+            auto onPick = m_onPick;
+            close();
+            onPick(path);
+        }
+
+        QLineEdit *m_search;
+        QListWidget *m_list;
+        std::function<void(const QString &)> m_onPick;
+    };
 }
 
 namespace
@@ -61,14 +196,14 @@ namespace
     class AssetLineEdit : public QLineEdit
     {
     public:
-        AssetLineEdit(const QString &text, QString contentDir)
-            : QLineEdit(text), m_contentDir(std::move(contentDir)) {}
+        AssetLineEdit(const QString &text, QString contentDir, QStringList suffixes)
+            : QLineEdit(text), m_contentDir(std::move(contentDir)), m_suffixes(std::move(suffixes)) {}
         void setOnDrop(std::function<void()> fn) { m_onDrop = std::move(fn); }
 
     protected:
         void dragEnterEvent(QDragEnterEvent *e) override
         {
-            if (!isReadOnly() && !draggedAssetPath(e->mimeData(), m_contentDir).isEmpty())
+            if (!isReadOnly() && !draggedAssetPath(e->mimeData(), m_contentDir, m_suffixes).isEmpty())
             {
                 e->setDropAction(Qt::CopyAction);
                 e->accept();
@@ -78,7 +213,7 @@ namespace
         }
         void dragMoveEvent(QDragMoveEvent *e) override
         {
-            if (!isReadOnly() && !draggedAssetPath(e->mimeData(), m_contentDir).isEmpty())
+            if (!isReadOnly() && !draggedAssetPath(e->mimeData(), m_contentDir, m_suffixes).isEmpty())
             {
                 e->setDropAction(Qt::CopyAction);
                 e->accept();
@@ -88,7 +223,7 @@ namespace
         }
         void dropEvent(QDropEvent *e) override
         {
-            const QString path = isReadOnly() ? QString() : draggedAssetPath(e->mimeData(), m_contentDir);
+            const QString path = isReadOnly() ? QString() : draggedAssetPath(e->mimeData(), m_contentDir, m_suffixes);
             if (path.isEmpty())
             {
                 QLineEdit::dropEvent(e);
@@ -103,6 +238,7 @@ namespace
 
     private:
         QString m_contentDir;
+        QStringList m_suffixes;
         std::function<void()> m_onDrop;
     };
 }
@@ -361,6 +497,308 @@ void PropertiesPanel::setKeyValue(const QString &key, const QString &value)
                  { if (remove) c.kv.remove(key); else c.kv[key] = value; }, tr("Edit %1").arg(key), "kv:" + key);
 }
 
+void PropertiesPanel::removeKey(const QString &key)
+{
+    editSelected([&](MapObject &c)
+                 { c.kv.remove(key); }, tr("Edit %1").arg(key), "kv:" + key);
+}
+
+// Vectors and angles as three fields; colour vectors (0-1) get a swatch, Scale a uniform lock.
+// Clearing every field removes the key so the class default applies.
+QWidget *PropertiesPanel::makeVectorEditor(const PropertyDef &p, const QString &value)
+{
+    const QString key = p.key;
+    const QString def = p.defaultValue;
+    const bool angles = p.type == PropType::Angles;
+    const bool color = !angles && key.contains("color", Qt::CaseInsensitive);
+    const bool scale = !angles && key.compare("Scale", Qt::CaseInsensitive) == 0;
+    static const char *xyz[3] = {"X", "Y", "Z"}, *pyr[3] = {"Pitch", "Yaw", "Roll"}, *rgb[3] = {"R", "G", "B"};
+    const char **names = color ? rgb : angles ? pyr : xyz;
+
+    auto *row = new QWidget;
+    auto *h = new QHBoxLayout(row);
+    h->setContentsMargins(0, 0, 0, 0);
+    h->setSpacing(3);
+    auto fields = QSharedPointer<std::array<QLineEdit *, 3>>::create();
+    for (int i = 0; i < 3; ++i)
+    {
+        auto *e = new QLineEdit;
+        e->setPlaceholderText(names[i]);
+        e->setToolTip(QString("%1 %2").arg(p.label, names[i]));
+        e->setMinimumWidth(30);
+        (*fields)[i] = e;
+        h->addWidget(e, 1);
+    }
+    QToolButton *swatch = nullptr;
+    QToolButton *lock = nullptr;
+    if (color)
+    {
+        swatch = new QToolButton;
+        swatch->setToolTip(tr("Pick colour"));
+        h->addWidget(swatch);
+    }
+    if (scale)
+    {
+        lock = new QToolButton;
+        lock->setText("=");
+        lock->setCheckable(true);
+        lock->setChecked(true);
+        lock->setToolTip(tr("Uniform scale"));
+        h->addWidget(lock);
+    }
+
+    // "s" is a uniform scale; anything else is "x y z".
+    auto components = [scale](const QString &text)
+    {
+        const QStringList parts = text.simplified().split(' ', Qt::SkipEmptyParts);
+        std::array<QString, 3> out;
+        for (int i = 0; i < 3; ++i)
+            out[i] = parts.value(scale && parts.size() == 1 ? 0 : i);
+        return out;
+    };
+    auto show = [fields, swatch, components](const QString &v)
+    {
+        const auto parts = components(v);
+        float c[3] = {0.f, 0.f, 0.f};
+        for (int i = 0; i < 3; ++i)
+        {
+            QLineEdit *e = (*fields)[i];
+            float f = 0.f;
+            const bool ok = parseCoord(parts[i], f);
+            c[i] = ok ? f : 0.f;
+            if (!e->hasFocus())
+            {
+                QSignalBlocker b(e);
+                e->setText(ok ? formatValue(f) : parts[i]);
+            }
+        }
+        if (swatch)
+        {
+            QPixmap pm(16, 16);
+            pm.fill(v.trimmed().isEmpty() ? QColor(0, 0, 0, 0)
+                                          : QColor::fromRgbF(std::clamp(c[0], 0.f, 1.f), std::clamp(c[1], 0.f, 1.f), std::clamp(c[2], 0.f, 1.f)));
+            swatch->setIcon(QIcon(pm));
+        }
+    };
+    show(value);
+
+    const float fallback = scale ? 1.f : 0.f;
+    auto commit = [this, key, def, fields, lock, fallback, components, show](int changed)
+    {
+        std::array<QString, 3> texts;
+        std::array<float, 3> values{};
+        bool any = false;
+        for (int i = 0; i < 3; ++i)
+        {
+            texts[i] = (*fields)[i]->text().trimmed();
+            if (texts[i].isEmpty())
+                continue;
+            if (!parseCoord(texts[i], values[i]))
+            {
+                show(currentValue(key, def));
+                return;
+            }
+            any = true;
+        }
+        if (!any)
+        {
+            removeKey(key);
+            show(currentValue(key, def));
+            return;
+        }
+        const auto defaults = components(def);
+        for (int i = 0; i < 3; ++i)
+        {
+            if (!texts[i].isEmpty())
+                continue;
+            values[i] = fallback;
+            parseCoord(defaults[i], values[i]);
+        }
+        if (lock && lock->isChecked() && changed >= 0)
+        {
+            const auto old = components(currentValue(key, def));
+            float before = fallback;
+            parseCoord(old[changed], before);
+            const float ratio = std::abs(before) > 1e-6f ? values[changed] / before : 0.f;
+            for (int i = 0; i < 3; ++i)
+            {
+                if (i == changed)
+                    continue;
+                float o = fallback;
+                parseCoord(old[i], o);
+                values[i] = ratio != 0.f ? o * ratio : values[changed];
+            }
+        }
+        setKeyValue(key, QString("%1 %2 %3").arg(formatValue(values[0]), formatValue(values[1]), formatValue(values[2])));
+        show(currentValue(key, def));
+    };
+    for (int i = 0; i < 3; ++i)
+    {
+        QLineEdit *e = (*fields)[i];
+        connect(e, &QLineEdit::editingFinished, this, [e, commit, i]
+                {
+            if (!e->isModified())
+                return;
+            e->setModified(false);
+            commit(i); });
+    }
+    if (swatch)
+    {
+        connect(swatch, &QToolButton::clicked, this, [this, key, def, components, commit, fields]
+                {
+            const auto parts = components(currentValue(key, def));
+            float c[3] = {1.f, 1.f, 1.f};
+            for (int i = 0; i < 3; ++i)
+                parseCoord(parts[i], c[i]);
+            const QColor initial = QColor::fromRgbF(std::clamp(c[0], 0.f, 1.f), std::clamp(c[1], 0.f, 1.f), std::clamp(c[2], 0.f, 1.f));
+            const QColor picked = QColorDialog::getColor(initial, this, tr("Pick Color"));
+            if (!picked.isValid())
+                return;
+            const double rgbValues[3] = {picked.redF(), picked.greenF(), picked.blueF()};
+            for (int i = 0; i < 3; ++i)
+                (*fields)[i]->setText(QString::number(rgbValues[i], 'f', 3));
+            commit(-1); });
+    }
+    m_bindings[key] = {show, def};
+    return row;
+}
+
+// Numbers whose default is empty ("not overridden"): an empty field removes the key.
+QWidget *PropertiesPanel::makeOptionalNumberEditor(const PropertyDef &p, const QString &value)
+{
+    const QString key = p.key;
+    const bool integer = p.type == PropType::Integer;
+    auto *w = new QLineEdit(value);
+    w->setPlaceholderText(tr("Default"));
+    w->setClearButtonEnabled(true);
+    if (integer)
+    {
+        w->setValidator(new QIntValidator(w));
+    }
+    else
+    {
+        auto *validator = new QDoubleValidator(w);
+        validator->setLocale(QLocale::c());
+        w->setValidator(validator);
+    }
+    connect(w, &QLineEdit::editingFinished, this, [this, key, w, integer]
+            {
+        if (!w->isModified())
+            return;
+        w->setModified(false);
+        const QString text = w->text().trimmed();
+        float f = 0.f;
+        if (text.isEmpty())
+            removeKey(key);
+        else if (parseCoord(text, f))
+            setKeyValue(key, integer ? QString::number(int(f)) : QString::number(double(f), 'g', 9)); });
+    m_bindings[key] = {[w](const QString &v)
+                       {
+                           if (w->hasFocus())
+                               return;
+                           QSignalBlocker b(w);
+                           w->setText(v);
+                       },
+                       p.defaultValue};
+    return w;
+}
+
+// Path field, a picker of matching assets under the content folder, and a filtered file dialog.
+QWidget *PropertiesPanel::makeAssetEditor(const PropertyDef &p, const QString &value)
+{
+    const QString key = p.key;
+    const QStringList suffixes = assetSuffixes(p.typeName);
+    auto *row = new QWidget;
+    auto *h = new QHBoxLayout(row);
+    h->setContentsMargins(0, 0, 0, 0);
+    h->setSpacing(3);
+    auto *e = new AssetLineEdit(value, m_ctx->projectDir(), suffixes);
+    e->setReadOnly(p.readOnly);
+    e->setClearButtonEnabled(!p.readOnly);
+    h->addWidget(e, 1);
+    // isModified is set by typing and by the clear button, not by setText
+    connect(e, &QLineEdit::editingFinished, this, [this, key, e]
+            {
+        if (!e->isModified())
+            return;
+        e->setModified(false);
+        setKeyValue(key, e->text().trimmed()); });
+    connect(e, &QLineEdit::textEdited, this, [this, key, e](const QString &text)
+            {
+        if (text.isEmpty() && !e->hasFocus())
+        {
+            e->setModified(false);
+            setKeyValue(key, QString());
+        } });
+    e->setOnDrop([this, key, e]
+                 { setKeyValue(key, e->text()); });
+
+    if (!p.readOnly)
+    {
+        if (!suffixes.isEmpty())
+        {
+            auto *pick = new QToolButton;
+            pick->setArrowType(Qt::DownArrow);
+            pick->setToolTip(tr("Choose asset"));
+            h->addWidget(pick);
+            connect(pick, &QToolButton::clicked, this, [this, key, e, row, suffixes]
+                    {
+                auto *picker = new AssetPicker(m_ctx->projectDir(), suffixes, e->text().trimmed(),
+                                               [this, key, e](const QString &path)
+                                               {
+                                                   {
+                                                       QSignalBlocker b(e);
+                                                       e->setText(path);
+                                                   }
+                                                   setKeyValue(key, path);
+                                               },
+                                               this);
+                picker->popup(row); });
+        }
+        auto *browse = new QToolButton;
+        browse->setText("...");
+        browse->setToolTip(tr("Browse, or drag an asset here from the Asset Browser"));
+        h->addWidget(browse);
+        connect(browse, &QToolButton::clicked, this, [this, key, e, suffixes]
+                {
+            const QDir root(m_ctx->projectDir());
+            QString start = m_ctx->projectDir();
+            if (!e->text().trimmed().isEmpty())
+            {
+                const QFileInfo current(root.absoluteFilePath(e->text().trimmed()));
+                if (current.dir().exists())
+                    start = current.absoluteFilePath();
+            }
+            QString filter;
+            if (!suffixes.isEmpty())
+            {
+                QStringList patterns;
+                for (const QString &suffix : suffixes)
+                    patterns << "*." + suffix;
+                filter = tr("Assets (%1)").arg(patterns.join(' ')) + ";;";
+            }
+            filter += tr("All Files (*)");
+            const QString f = QFileDialog::getOpenFileName(this, tr("Select Asset"), start, filter);
+            if (f.isEmpty())
+                return;
+            const QString rel = root.relativeFilePath(f);
+            {
+                QSignalBlocker b(e);
+                e->setText(rel.startsWith("..") ? f : rel);
+            }
+            setKeyValue(key, e->text()); });
+    }
+    m_bindings[key] = {[e](const QString &v)
+                       {
+                           if (e->hasFocus())
+                               return;
+                           QSignalBlocker b(e);
+                           e->setText(v);
+                       },
+                       p.defaultValue};
+    return row;
+}
+
 const ModelAsset *PropertiesPanel::objectModel(const MapObject &o) const
 {
     if (o.solid)
@@ -467,6 +905,13 @@ QWidget *PropertiesPanel::makeEditor(const PropertyDef &p, const MapObject &o)
     { m_bindings[key] = {std::move(fn), def}; };
     auto asBool = [](const QString &s)
     { return s == "1" || s.compare("true", Qt::CaseInsensitive) == 0; };
+
+    if ((p.type == PropType::Float || p.type == PropType::Integer) && def.trimmed().isEmpty())
+    {
+        QWidget *w = makeOptionalNumberEditor(p, val);
+        w->setToolTip(p.help.isEmpty() ? QString("%1 (%2)").arg(p.key, p.typeName) : p.help);
+        return w;
+    }
 
     switch (p.type)
     {
@@ -608,33 +1053,12 @@ QWidget *PropertiesPanel::makeEditor(const PropertyDef &p, const MapObject &o)
         break;
     }
     case PropType::Asset:
-    {
-        auto *row = new QWidget;
-        auto *h = new QHBoxLayout(row);
-        h->setContentsMargins(0, 0, 0, 0);
-        auto *e = new AssetLineEdit(val, m_ctx->projectDir());
-        auto *b = new QToolButton;
-        b->setText("...");
-        b->setToolTip(tr("Browse, or drag an asset here from the Asset Browser"));
-        h->addWidget(e, 1);
-        h->addWidget(b);
-        e->setReadOnly(p.readOnly);
-        connect(e, &QLineEdit::editingFinished, this, [this, key, e]
-                { setKeyValue(key, e->text()); });
-        e->setOnDrop([this, key, e]
-                     { setKeyValue(key, e->text()); });
-        connect(b, &QToolButton::clicked, this, [this, key, e]
-                {
-            const QString f = QFileDialog::getOpenFileName(this, tr("Select Asset"), m_ctx->projectDir());
-            if (f.isEmpty()) return;
-            const QString rel = QDir(m_ctx->projectDir()).relativeFilePath(f);
-            e->setText(rel.startsWith("..") ? f : rel);
-            setKeyValue(key, e->text()); });
-        bind([e](const QString &v)
-             { QSignalBlocker bl(e); e->setText(v); });
-        result = row;
+        result = makeAssetEditor(p, val);
         break;
-    }
+    case PropType::Vector:
+    case PropType::Angles:
+        result = makeVectorEditor(p, val);
+        break;
     default:
     {
         auto *w = new QLineEdit(val);
@@ -785,6 +1209,15 @@ void PropertiesPanel::rebuild()
         lay->addWidget(warn);
     }
     lay->addStretch();
+    auto *guard = new WheelGuard(form);
+    for (QWidget *w : form->findChildren<QWidget *>())
+    {
+        if (qobject_cast<QAbstractSpinBox *>(w) || qobject_cast<QComboBox *>(w))
+        {
+            w->setFocusPolicy(Qt::StrongFocus);
+            w->installEventFilter(guard);
+        }
+    }
     m_scroll->setWidget(form);
     m_building = false;
     m_outputs->reload();

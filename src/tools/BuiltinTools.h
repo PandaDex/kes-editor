@@ -48,7 +48,10 @@ private:
         Rotate
     };
 
-    AABB solidSelectionBounds() const;
+    // Bounds the 2D handles act on: solids and point entities with a Scale key (model bounds when loaded).
+    bool hasHandles(const MapObject &o) const;
+    AABB handleBounds(const MapObject &o) const;
+    AABB handleSelectionBounds() const;
     QPointF handleScreenPos(Viewport *, int idx, const AABB &, QVector3D *world = nullptr) const;
     int hitHandle(Viewport *, const QPointF &) const;
     float gizmoLength(Viewport *, const QVector3D &center) const;
@@ -61,7 +64,8 @@ private:
     void beginMove(Viewport *, const QPointF &);
     void applyDelta(const QVector3D &delta);
     void applyResize(Viewport *, const QPointF &);
-    void applyScale(float delta);
+    void applyScale(float factor);
+    float axisScaleFactor(float delta) const;
     void applyRotation(const QVector3D &axis, float radians);
     void cancelDrag();
 
@@ -80,6 +84,7 @@ private:
     AABB m_startBounds;
     int m_axis = -1;
     float m_axisStart = 0.f;
+    float m_scaleFactor = 1.f;
     QVector3D m_gizmoCenter;
     QVector3D m_rotationStart;
     float m_rotationAccumulated = 0.f;

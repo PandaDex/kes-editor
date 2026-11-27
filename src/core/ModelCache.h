@@ -90,3 +90,5 @@ private:
 
 // Case-insensitive key lookup: .dec property names ("Model") and older lowercase keys both occur.
 QString objectValue(const MapObject &o, const QString &key, const QString &fallback = QString());
+// "s" or "x y z"; missing or bad parts stay 1.
+QVector3D parseScale(const QString &text);

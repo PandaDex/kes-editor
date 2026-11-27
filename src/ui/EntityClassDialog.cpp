@@ -22,7 +22,7 @@
 namespace
 {
     const QStringList kTypes = {"string", "integer", "float", "boolean", "color255", "vector", "angle",
-                                "target_source", "target_destination", "studio", "material", "sound", "sprite"};
+                                "target_source", "target_destination", "studio", "material", "sound", "sprite", "particlesystem", "animgraph", "animation"};
 }
 
 EntityClassDialog::EntityClassDialog(EditorContext *ctx, QWidget *parent) : QDialog(parent), m_ctx(ctx)

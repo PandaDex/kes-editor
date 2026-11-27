@@ -58,8 +58,12 @@ private:
     void refresh();
     void editSelected(const std::function<void(MapObject &)> &fn, const QString &text, const QString &mergeKey);
     void setKeyValue(const QString &key, const QString &value);
+    void removeKey(const QString &key);
     QString currentValue(const QString &key, const QString &def) const;
     QWidget *makeEditor(const PropertyDef &p, const MapObject &o);
+    QWidget *makeVectorEditor(const PropertyDef &p, const QString &value);
+    QWidget *makeOptionalNumberEditor(const PropertyDef &p, const QString &value);
+    QWidget *makeAssetEditor(const PropertyDef &p, const QString &value);
     const ModelAsset *objectModel(const MapObject &o) const;
     QString slotSignature(const MapObject &o) const;
     void addSlotEditors(QFormLayout *form, const MapObject &o);

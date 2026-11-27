@@ -22,7 +22,7 @@
 // PROPERTY TYPES
 //   string integer float boolean choices flags color255 vector angle
 //   target_source (this entity's name)   target_destination (picks another entity's name)
-//   studio material sound sprite (asset paths with a browse button)
+//   studio material sound sprite particlesystem animgraph animation (asset paths with a picker)
 //
 // Keys must match what the engine entity reads in ApplyProperty(), and inputs/outputs
 // what its GetMapScriptPorts() lists.

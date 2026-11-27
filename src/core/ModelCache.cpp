@@ -14,25 +14,6 @@ namespace
 {
 constexpr int kWarning = 1;
 
-QVector3D parseScale(const QString &text)
-{
-    const QStringList parts = text.simplified().split(' ', Qt::SkipEmptyParts);
-    QVector3D s(1.f, 1.f, 1.f);
-    bool ok = false;
-    if (parts.size() == 1)
-    {
-        const float v = parts[0].toFloat(&ok);
-        return ok ? QVector3D(v, v, v) : s;
-    }
-    for (int i = 0; i < 3 && i < parts.size(); ++i)
-    {
-        const float v = parts[i].toFloat(&ok);
-        if (ok)
-            s[i] = v;
-    }
-    return s;
-}
-
 QDateTime fileTime(const QString &path)
 {
     const QFileInfo info(path);
@@ -175,6 +156,25 @@ QString objectValue(const MapObject &o, const QString &key, const QString &fallb
             return it.value();
     }
     return fallback;
+}
+
+QVector3D parseScale(const QString &text)
+{
+    const QStringList parts = text.simplified().split(' ', Qt::SkipEmptyParts);
+    QVector3D s(1.f, 1.f, 1.f);
+    bool ok = false;
+    if (parts.size() == 1)
+    {
+        const float v = parts[0].toFloat(&ok);
+        return ok ? QVector3D(v, v, v) : s;
+    }
+    for (int i = 0; i < 3 && i < parts.size(); ++i)
+    {
+        const float v = parts[i].toFloat(&ok);
+        if (ok)
+            s[i] = v;
+    }
+    return s;
 }
 
 void ModelCache::setRoot(const QString &contentDir)

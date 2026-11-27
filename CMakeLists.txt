@@ -103,7 +103,7 @@ add_custom_command(TARGET forge POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_dire
 
 include(CTest)
 if(BUILD_TESTING)
-    foreach(test shadergraph_test modeleditor_test localization_test project_test particles_test rmlpreview_test particleview_test assetbrowser_test)
+    foreach(test shadergraph_test modeleditor_test localization_test project_test particles_test rmlpreview_test particleview_test assetbrowser_test layout_test)
         add_executable(forge_${test} tests/${test}.cpp)
         target_link_libraries(forge_${test} PRIVATE forge_core)
         if(MSVC)
