@@ -1,8 +1,10 @@
 #include "tools/MaterialTool.h"
 #include "core/EditorContext.h"
+#include "core/MaterialLibrary.h"
 #include "render/Batch.h"
 #include "render/Viewport.h"
 #include <QDoubleSpinBox>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -23,7 +25,7 @@ namespace
     }
 }
 
-bool MaterialOps::pickFace(EditorContext *ctx, Viewport *vp, const QPointF &pos, MaterialFaceRef &out)
+bool MaterialOps::pickFace(EditorContext *ctx, Viewport *vp, const QPointF &pos, MaterialFaceRef &out, float *distance)
 {
     const Ray ray = vp->camera().ray(pos);
     float best = 1e30f;
@@ -60,6 +62,8 @@ bool MaterialOps::pickFace(EditorContext *ctx, Viewport *vp, const QPointF &pos,
             best = t;
             out = {o.id, bi, bestFace};
             found = true;
+            if (distance)
+                *distance = t;
         }
     }
     return found;
@@ -123,14 +127,24 @@ bool MaterialOps::dropOnViewport(EditorContext *ctx, Viewport *vp, const QPointF
 
 MaterialTool::MaterialTool(EditorContext *ctx) : Tool(ctx)
 {
-    connect(ctx, &EditorContext::currentMaterialChanged, this, [this]
-            {
-        if (m_materialLabel)
-            m_materialLabel->setText(m_ctx->currentMaterial().isEmpty() ? tr("(none)") : m_ctx->currentMaterial()); });
+    connect(ctx, &EditorContext::currentMaterialChanged, this, &MaterialTool::updateMaterialLabel);
+    connect(ctx->materials(), &MaterialLibrary::changed, this, &MaterialTool::updateMaterialLabel);
     connect(ctx->doc(), &MapDocument::objectsChanged, this, [this]
             { pruneSelection(); refreshMappingFields(); });
     connect(ctx->doc(), &MapDocument::selectionChanged, this, [this]
             { refreshMappingFields(); });
+}
+
+void MaterialTool::updateMaterialLabel()
+{
+    if (!m_materialLabel)
+        return;
+    const QString material = m_ctx->currentMaterial();
+    m_materialLabel->setText(material.isEmpty() ? tr("(none)") : QFileInfo(material).completeBaseName());
+    m_materialLabel->setToolTip(material);
+    const MaterialInfo *info = material.isEmpty() ? nullptr : m_ctx->materials()->find(material);
+    m_materialThumb->setPixmap(info ? materialThumbnail(*info, 48) : QPixmap());
+    m_materialThumb->setVisible(info != nullptr);
 }
 
 QString MaterialTool::statusHint() const
@@ -323,11 +337,15 @@ QWidget *MaterialTool::createOptionsPanel(QWidget *parent)
     auto *panel = new QWidget(parent);
     auto *layout = new QVBoxLayout(panel);
 
-    auto *current = new QFormLayout;
-    m_materialLabel = new QLabel(m_ctx->currentMaterial().isEmpty() ? tr("(none)") : m_ctx->currentMaterial(), panel);
+    auto *current = new QHBoxLayout;
+    m_materialThumb = new QLabel(panel);
+    m_materialThumb->setFixedSize(48, 48);
+    m_materialLabel = new QLabel(panel);
     m_materialLabel->setWordWrap(true);
-    current->addRow(tr("Material:"), m_materialLabel);
+    current->addWidget(m_materialThumb);
+    current->addWidget(m_materialLabel, 1);
     layout->addLayout(current);
+    updateMaterialLabel();
 
     auto *applyRow = new QHBoxLayout;
     auto *applySelection = new QPushButton(tr("Apply to Selection"), panel);

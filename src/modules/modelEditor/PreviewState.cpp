@@ -1,6 +1,6 @@
 #include "PreviewState.h"
 
-#include "GraphModel.h"
+#include "AnimGraphDocument.h"
 #include "ModelDocument.h"
 #include "animation_pose.h"
 
@@ -11,8 +11,10 @@
 
 namespace kme {
 
-PreviewState::PreviewState(ModelDocument* doc, GraphModel* graph, QObject* parent)
-    : QObject(parent), m_doc(doc), m_graph(graph)
+PreviewState::~PreviewState() = default;
+
+PreviewState::PreviewState(ModelDocument* doc, AnimGraphDocument* graph, QObject* parent)
+    : QObject(parent), m_doc(doc), m_graph(graph), m_ids(std::make_unique<AnimGraphIds>())
 {
     m_timer.setInterval(16);
     m_timer.setTimerType(Qt::PreciseTimer);
@@ -23,7 +25,7 @@ PreviewState::PreviewState(ModelDocument* doc, GraphModel* graph, QObject* paren
         evaluate(0.0f);
     });
     if (m_graph) {
-        connect(m_graph, &GraphModel::changed, this, [this] {
+        connect(m_graph, &AnimGraphDocument::changed, this, [this] {
             m_graphDirty = true;
             if (m_mode == Mode::Graph && !m_playing) evaluate(0.0f);
         });
@@ -112,7 +114,7 @@ void PreviewState::rebuildGraph()
 {
     m_graphDirty = false;
     if (!m_graph) return;
-    const AnimBlendTreeData tree = m_graph->toBlendTree();
+    const AnimBlendTreeData tree = m_graph->toBlendTree(m_ids.get());
     std::string error;
     // don't reset values the user already set
     QHash<QString, float> values;

@@ -259,6 +259,11 @@ namespace nodegraph
 
     void GraphModel::edit(const QString& text, const std::function<void()>& fn, const QString& mergeKey)
     {
+        if (m_host)
+        {
+            m_host->edit(text, fn, mergeKey);
+            return;
+        }
         if (m_inEdit)
         {
             fn();

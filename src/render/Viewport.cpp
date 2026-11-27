@@ -1,6 +1,7 @@
 #include "render/Viewport.h"
 #include "core/EditorContext.h"
 #include "core/ModelCache.h"
+#include "tools/AssetDrop.h"
 #include "tools/MaterialTool.h"
 #include "ui/AssetDrag.h"
 #include <QDragEnterEvent>
@@ -844,42 +845,39 @@ void Viewport::mousePressEvent(QMouseEvent *e)
 
 void Viewport::mouseDoubleClickEvent(QMouseEvent *e) { mousePressEvent(e); }
 
-QString Viewport::droppedMaterial(const QMimeData *mime) const
-{
-    return draggedAssetPath(mime, m_ctx->materials()->root(), {"mat"});
-}
-
 void Viewport::dragEnterEvent(QDragEnterEvent *e)
 {
-    if (!droppedMaterial(e->mimeData()).isEmpty())
-    {
-        e->setDropAction(Qt::CopyAction);
-        e->accept();
-    }
+    m_drop.reset(AssetDrop::create(m_ctx, this, e->mimeData()));
+    if (!m_drop)
+        return;
+    e->setDropAction(Qt::CopyAction);
+    e->accept();
+    m_ctx->setActiveViewport(this);
+    m_drop->move(e->position(), QApplication::keyboardModifiers() & Qt::ShiftModifier);
 }
 
 void Viewport::dragMoveEvent(QDragMoveEvent *e)
 {
-    if (!droppedMaterial(e->mimeData()).isEmpty())
-    {
-        e->setDropAction(Qt::CopyAction);
-        e->accept();
-    }
+    if (!m_drop)
+        return;
+    e->setDropAction(Qt::CopyAction);
+    e->accept();
+    m_drop->move(e->position(), QApplication::keyboardModifiers() & Qt::ShiftModifier);
+}
+
+void Viewport::dragLeaveEvent(QDragLeaveEvent *)
+{
+    m_drop.reset(); // reverts the preview
 }
 
 void Viewport::dropEvent(QDropEvent *e)
 {
-    const QString material = droppedMaterial(e->mimeData());
-    if (material.isEmpty())
+    if (!m_drop)
         return;
     e->setDropAction(Qt::CopyAction);
     e->accept();
-    if (!m_ctx->materials()->find(material))
-        m_ctx->materials()->reload();   // a new .mat, or one outside the scanned folder
-    m_ctx->setActiveViewport(this);
-    const bool wholeObject = QApplication::keyboardModifiers() & Qt::ShiftModifier;
-    if (!MaterialOps::dropOnViewport(m_ctx, this, e->position(), material, wholeObject))
-        m_ctx->log(tr("No brush under the cursor; %1 is now the current material.").arg(material), LogLevel::Warning);
+    m_drop->commit(e->position(), QApplication::keyboardModifiers() & Qt::ShiftModifier);
+    m_drop.reset();
     setFocus();
 }
 

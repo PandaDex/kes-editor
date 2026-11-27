@@ -1,8 +1,10 @@
 #include "ui/PropertiesPanel.h"
 #include "core/EditorContext.h"
+#include "core/MaterialLibrary.h"
 #include "core/ModelCache.h"
 #include "entities/EntityDefs.h"
 #include "ui/AssetDrag.h"
+#include "ui/PostProcessInspector.h"
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QCheckBox>
@@ -92,7 +94,7 @@ namespace
     {
     public:
         AssetPicker(const QString &root, const QStringList &suffixes, const QString &current,
-                    std::function<void(const QString &)> onPick, QWidget *parent)
+                    std::function<void(const QString &)> onPick, std::function<QIcon(const QString &)> iconFor, QWidget *parent)
             : QFrame(parent, Qt::Popup), m_onPick(std::move(onPick))
         {
             setAttribute(Qt::WA_DeleteOnClose);
@@ -105,6 +107,8 @@ namespace
             m_search->setClearButtonEnabled(true);
             m_search->installEventFilter(this);
             m_list = new QListWidget(this);
+            if (iconFor)
+                m_list->setIconSize(QSize(32, 32));
             lay->addWidget(m_search);
             lay->addWidget(m_list, 1);
 
@@ -124,6 +128,8 @@ namespace
                 auto *item = new QListWidgetItem(path, m_list);
                 item->setData(Qt::UserRole, path);
                 item->setToolTip(path);
+                if (iconFor)
+                    item->setIcon(iconFor(path));
                 if (path.compare(current, Qt::CaseInsensitive) == 0)
                     m_list->setCurrentItem(item);
             }
@@ -714,6 +720,19 @@ QWidget *PropertiesPanel::makeAssetEditor(const PropertyDef &p, const QString &v
     h->setSpacing(3);
     auto *e = new AssetLineEdit(value, m_ctx->projectDir(), suffixes);
     e->setReadOnly(p.readOnly);
+    std::function<QIcon(const QString &)> iconFor;
+    QAction *thumbnail = nullptr;
+    if (suffixes == QStringList{"mat"})
+    {
+        iconFor = [this](const QString &path) -> QIcon
+        {
+            const MaterialInfo *info = path.isEmpty() ? nullptr : m_ctx->materials()->find(path);
+            return info ? QIcon(materialThumbnail(*info, 32)) : QIcon();
+        };
+        thumbnail = e->addAction(iconFor(value.trimmed()), QLineEdit::LeadingPosition);
+        connect(e, &QLineEdit::textChanged, this, [thumbnail, iconFor](const QString &text)
+                { thumbnail->setIcon(iconFor(text.trimmed())); });
+    }
     e->setClearButtonEnabled(!p.readOnly);
     h->addWidget(e, 1);
     // isModified is set by typing and by the clear button, not by setText
@@ -741,7 +760,7 @@ QWidget *PropertiesPanel::makeAssetEditor(const PropertyDef &p, const QString &v
             pick->setArrowType(Qt::DownArrow);
             pick->setToolTip(tr("Choose asset"));
             h->addWidget(pick);
-            connect(pick, &QToolButton::clicked, this, [this, key, e, row, suffixes]
+            connect(pick, &QToolButton::clicked, this, [this, key, e, row, suffixes, iconFor]
                     {
                 auto *picker = new AssetPicker(m_ctx->projectDir(), suffixes, e->text().trimmed(),
                                                [this, key, e](const QString &path)
@@ -752,7 +771,7 @@ QWidget *PropertiesPanel::makeAssetEditor(const PropertyDef &p, const QString &v
                                                    }
                                                    setKeyValue(key, path);
                                                },
-                                               this);
+                                               iconFor, this);
                 picker->popup(row); });
         }
         auto *browse = new QToolButton;
@@ -788,8 +807,10 @@ QWidget *PropertiesPanel::makeAssetEditor(const PropertyDef &p, const QString &v
             }
             setKeyValue(key, e->text()); });
     }
-    m_bindings[key] = {[e](const QString &v)
+    m_bindings[key] = {[e, thumbnail, iconFor](const QString &v)
                        {
+                           if (thumbnail)
+                               thumbnail->setIcon(iconFor(v.trimmed()));
                            if (e->hasFocus())
                                return;
                            QSignalBlocker b(e);
@@ -1193,13 +1214,36 @@ void PropertiesPanel::rebuild()
     const ClassDef *def = o->classname.isEmpty() ? nullptr : m_ctx->registry()->resolved(o->classname);
     if (def)
     {
+        const bool postProcess = isPostProcessVolumeClass(o->classname);
         for (const PropertyDef &p : def->props)
         {
-            if (isBuiltinKey(p.key))
+            if (isBuiltinKey(p.key) || (postProcess && isPostProcessInspectorKey(p.key)))
                 continue;
             f->addRow(p.type == PropType::Flags ? tr("Spawn Flags") : p.label, makeEditor(p, *o));
         }
         addSlotEditors(f, *o);
+        if (postProcess)
+        {
+            PostProcessInspectorHost host;
+            host.set = [this](const QString &key, const QString &value)
+            {
+                setKeyValue(key, value);
+                refresh();
+            };
+            host.remove = [this](const QString &key)
+            {
+                removeKey(key);
+                refresh();
+            };
+            host.editKeys = [this](const std::function<void(QMap<QString, QString> &)> &edit, const QString &text)
+            {
+                editSelected([&](MapObject &c) { edit(c.kv); }, text, QString());
+                refresh();
+            };
+            host.bind = [this](const QString &key, std::function<void(const QString &)> update)
+            { m_bindings[key] = {std::move(update), QString()}; };
+            lay->addWidget(buildPostProcessInspector(*o, host));
+        }
     }
     else if (!o->classname.isEmpty())
     {

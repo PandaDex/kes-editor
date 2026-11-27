@@ -3,6 +3,7 @@
 #include <QHash>
 #include <QImage>
 #include <QObject>
+#include <QPixmap>
 #include <QSize>
 #include <QString>
 #include <QStringList>
@@ -73,3 +74,6 @@ private:
     QHash<QString, MaterialInfo> m_materials;
     QStringList m_order;
 };
+
+// Square preview: the texture tinted by the material colour, or the plain colour.
+QPixmap materialThumbnail(const MaterialInfo &info, int size = 128);

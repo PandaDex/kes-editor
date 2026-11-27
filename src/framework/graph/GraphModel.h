@@ -31,6 +31,15 @@ namespace nodegraph
         int toPort = 0;
     };
 
+    // Takes over undo for graphs that are parts of a bigger document (one stack for all of them).
+    class GraphUndoHost
+    {
+    public:
+        virtual ~GraphUndoHost() = default;
+        virtual QUndoStack* undoStack() = 0;
+        virtual void edit(const QString& text, const std::function<void()>& fn, const QString& mergeKey) = 0;
+    };
+
     // Nodes and connections, with undo through edit(). Subclasses keep graph-wide data (a material,
     // a preview model) in the same JSON so it undoes along with the nodes.
     class GraphModel : public QObject
@@ -41,7 +50,8 @@ namespace nodegraph
 
         const GraphDomain& domain() const { return *m_domain; }
         const NodeCatalog& catalog() const { return m_domain->catalog(); }
-        QUndoStack* undoStack() { return &m_undo; }
+        QUndoStack* undoStack() { return m_host ? m_host->undoStack() : &m_undo; }
+        void setUndoHost(GraphUndoHost* host) { m_host = host; }
 
         const GraphNode* node(int id) const;
         const NodeDef* def(int nodeId) const;
@@ -101,5 +111,6 @@ namespace nodegraph
         int m_nextConnId = 1;
         bool m_inEdit = false;
         QUndoStack m_undo;
+        GraphUndoHost* m_host = nullptr;
     };
 }

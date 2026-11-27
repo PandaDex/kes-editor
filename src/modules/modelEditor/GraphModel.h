@@ -2,6 +2,9 @@
 
 #include "framework/graph/GraphModel.h"
 
+#include <QHash>
+#include <cstdint>
+
 struct AnimBlendTreeData;
 
 namespace kme
@@ -43,8 +46,15 @@ namespace kme
         const QString& modelPath() const { return m_modelPath; }
         void setModelPath(const QString& path);
 
+        // This graph alone; AnimGraphDocument handles state machines.
         AnimBlendTreeData toBlendTree() const;
         void loadBlendTree(const AnimBlendTreeData& tree, QStringList* warnings = nullptr);
+
+        // Appends this graph's nodes and links as graph `graphId` of the file, numbering nodes from
+        // nextNodeId. localToFile receives the id each node got.
+        void appendToBlendTree(AnimBlendTreeData& tree, int32_t graphId, int32_t& nextNodeId, QHash<int, int>* localToFile) const;
+        // The JSON loadJson takes for the nodes of graph `graphId` of a file.
+        QJsonObject graphJson(const AnimBlendTreeData& tree, int32_t graphId) const;
 
     signals:
         void modelPathChanged();

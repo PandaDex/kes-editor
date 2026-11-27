@@ -79,6 +79,14 @@
 	Loop(boolean) : "Loop" : 0 : "Looping sounds start with the map."
 	AutoPlay(boolean) : "Auto Play" : 0 : "Start with the map."
 	Spatial(boolean) : "3D" : 1
+	Bus(choices) : "Bus" : "Effects" : "Mixer bus the sound plays on." =
+	[
+		"Effects" : "Effects"
+		"Music" : "Music"
+		"Ambient" : "Ambient"
+		"Voice" : "Voice"
+		"Ui" : "UI"
+	]
 
 	input Play(void) : "Start the sound (restarts it if playing)."
 	input Stop(void) : "Stop the sound."
@@ -189,7 +197,7 @@
 ]
 
 @SolidClass base(Targetname, Kill) color(200 170 120)
-	= PostProcessVolumeEntity : "Camera post processing (exposure, bloom, vignette) while the camera is inside the volume, or everywhere when unbound. Only the settings given a value are overridden."
+	= PostProcessVolumeEntity : "Camera post processing (exposure, bloom, vignette, grading, sharpening) while the camera is inside the volume, or everywhere when unbound. Only the settings given a value are overridden."
 [
 	Unbound(boolean) : "Unbound (global)" : 0 : "Applies everywhere, not only inside the volume."
 	BlendDistance(float) : "Blend distance (m)" : 0 : "Fades in over this distance outside the volume."
@@ -213,6 +221,34 @@
 	VignetteIntensity(float) : "Vignette intensity" : "" : "0 = off, 1 = strong (engine default 0)."
 	VignetteSmoothness(float) : "Vignette smoothness" : "" : "0-1 (engine default 0.5)."
 	VignetteColor(vector) : "Vignette color" : "" : "Engine default 0 0 0."
+	Tonemapper(choices) : "Tonemapper" : "" =
+	[
+		"" : "Not overridden"
+		"0" : "ACES"
+		"1" : "AgX"
+		"2" : "Neutral (Khronos PBR)"
+		"3" : "Reinhard"
+		"4" : "None (clamp)"
+	]
+	Temperature(float) : "White balance temperature" : "" : "-1 cooler .. 1 warmer (engine default 0)."
+	Tint(float) : "White balance tint" : "" : "-1 green .. 1 magenta (engine default 0)."
+	Saturation(float) : "Saturation" : "" : "Engine default 1."
+	Contrast(float) : "Contrast" : "" : "Engine default 1."
+	ColorFilter(vector) : "Color filter" : "" : "Engine default 1 1 1."
+	Lift(vector) : "Lift (shadows)" : "" : "-1..1 per channel (engine default 0 0 0)."
+	Gamma(vector) : "Gamma (midtones)" : "" : "Engine default 1 1 1."
+	Gain(vector) : "Gain (highlights)" : "" : "Engine default 1 1 1."
+	Sharpen(float) : "Sharpen" : "" : "0-1, contrast adaptive sharpening (engine default 0)."
+	AmbientOcclusionIntensity(float) : "Ambient occlusion intensity" : "" : "0 = off (engine default 1)."
+	AmbientOcclusionRadius(float) : "Ambient occlusion radius (m)" : "" : "Engine default 0.5."
+	ContactShadowLength(float) : "Contact shadow length (m)" : "" : "Sun only, 0 = off (engine default 0.3)."
+	ReflectionIntensity(float) : "Screen-space reflections" : "" : "0 = off, 1 = full (engine default 1)."
+	ReflectionMaxRoughness(float) : "Reflection max roughness" : "" : "Engine default 0.5."
+	ReflectionMaxDistance(float) : "Reflection max distance (m)" : "" : "Engine default 30."
+	DepthOfFieldFocusDistance(float) : "Depth of field focus distance (m)" : "" : "Engine default 10."
+	DepthOfFieldFocusRange(float) : "Depth of field focus range (m)" : "" : "Distance from the focus to full blur (engine default 10)."
+	DepthOfFieldMaxBlur(float) : "Depth of field max blur" : "" : "Percent of the screen height, 0 = off (engine default 0)."
+	MotionBlurIntensity(float) : "Motion blur" : "" : "Camera motion blur, 0 = off, 1 = a full frame (engine default 0)."
 
 	input Enable(void) : "Turn the volume on."
 	input Disable(void) : "Turn the volume off."

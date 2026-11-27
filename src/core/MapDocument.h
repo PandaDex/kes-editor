@@ -46,6 +46,9 @@ public:
     // Interactive drags: preview without undo, then commit with the pre-drag state.
     void previewReplace(const QVector<MapObject> &objs);
     void commitFromPreview(const QVector<MapObject> &before, const QString &text);
+    // Drag-and-drop previews: an object outside the undo stack until it's added for real.
+    ObjectId previewInsert(MapObject o);
+    void previewRemove(ObjectId id);
 
     QUndoStack *undoStack() { return &m_undo; }
 

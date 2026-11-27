@@ -401,6 +401,26 @@ void MapDocument::commitFromPreview(const QVector<MapObject> &before, const QStr
         m_undo.push(new ModifyCmd(this, b, a, text, QString()));
 }
 
+ObjectId MapDocument::previewInsert(MapObject o)
+{
+    while (m_objects.count(m_nextId))
+        ++m_nextId;
+    o.id = m_nextId++;
+    if (o.guid.isNull())
+        o.guid = QUuid::createUuid();
+    rawInsert(o);
+    notifyChanged();
+    return o.id;
+}
+
+void MapDocument::previewRemove(ObjectId id)
+{
+    if (!find(id))
+        return;
+    rawRemove(id);
+    notifyChanged();
+}
+
 void MapDocument::syncEntityBounds(const EntityRegistry &reg)
 {
     bool any = false;

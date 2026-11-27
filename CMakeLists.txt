@@ -97,15 +97,36 @@ if(MSVC)
     endforeach()
 endif()
 
-add_custom_command(TARGET forge POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/entities $<TARGET_FILE_DIR:forge>/entities)
+# Tracked per file so editing a .dec updates the exe folder without relinking forge.
+# The folder is spelled out because $<TARGET_FILE_DIR:forge> would make this depend on forge.
+get_property(forge_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(forge_multi_config)
+    set(forge_exe_dir "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>")
+else()
+    set(forge_exe_dir "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+file(GLOB forge_entity_files CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/entities/*.dec")
+set(forge_entity_outputs)
+foreach(src IN LISTS forge_entity_files)
+    get_filename_component(name "${src}" NAME)
+    set(dst "${forge_exe_dir}/entities/${name}")
+    add_custom_command(OUTPUT "${dst}"
+        COMMAND ${CMAKE_COMMAND} -E copy "${src}" "${dst}"
+        DEPENDS "${src}"
+        VERBATIM)
+    list(APPEND forge_entity_outputs "${dst}")
+endforeach()
+add_custom_target(forge_entities DEPENDS ${forge_entity_outputs})
+add_dependencies(forge forge_entities)
 # Engine UI assets (/engine/ui/...) for the .rml preview when Forge runs away from the source tree
 add_custom_command(TARGET forge POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${KES_ENGINE_DIR}/assets/engine/ui $<TARGET_FILE_DIR:forge>/engine-assets/engine/ui)
 
 include(CTest)
 if(BUILD_TESTING)
-    foreach(test shadergraph_test modeleditor_test localization_test project_test particles_test rmlpreview_test particleview_test assetbrowser_test layout_test)
+    foreach(test shadergraph_test modeleditor_test animstatemachine_test localization_test project_test particles_test rmlpreview_test particleview_test assetbrowser_test layout_test assetdrop_test)
         add_executable(forge_${test} tests/${test}.cpp)
         target_link_libraries(forge_${test} PRIVATE forge_core)
+        target_compile_definitions(forge_${test} PRIVATE KES_GAME_CONTENT="${CMAKE_CURRENT_SOURCE_DIR}/../../game/content")
         if(MSVC)
             target_compile_options(forge_${test} PRIVATE /utf-8)
         endif()

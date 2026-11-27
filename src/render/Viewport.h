@@ -17,6 +17,7 @@
 #include <QSet>
 #include <QTimer>
 
+class AssetDrop;
 class EditorContext;
 struct ModelAsset;
 
@@ -55,10 +56,10 @@ protected:
     void dragEnterEvent(QDragEnterEvent *) override;
     void dragMoveEvent(QDragMoveEvent *) override;
     void dropEvent(QDropEvent *) override;
+    void dragLeaveEvent(QDragLeaveEvent *) override;
     bool focusNextPrevChild(bool) override { return false; } // Tab belongs to the tools
 
 private:
-    QString droppedMaterial(const QMimeData *mime) const;
     void drawGrid2D(Batch &b);
     void drawGrid3D(Batch &b);
     void drawScene(Batch &b);
@@ -110,4 +111,5 @@ private:
     QSet<QString> m_failedSprites;
     QTimer m_flyTimer;
     QElapsedTimer m_clock;
+    std::unique_ptr<AssetDrop> m_drop;
 };

@@ -13,7 +13,8 @@ namespace nodegraph
     public:
         static constexpr const char* kNodeMime = "application/x-forge-graph-node";
 
-        explicit NodeGraphView(NodeGraphScene* scene, QWidget* parent = nullptr);
+        // Any scene works; frame actions use the node bounds of a NodeGraphScene, else all items.
+        explicit NodeGraphView(QGraphicsScene* scene, QWidget* parent = nullptr);
 
         void frameAll();
         void frameSelection();
@@ -43,8 +44,9 @@ namespace nodegraph
 
     private:
         void fitRect(const QRectF& r);
+        QRectF contentRect(bool selectedOnly) const;
 
-        NodeGraphScene* m_scene;
+        QGraphicsScene* m_scene;
         bool m_panning = false;
         bool m_spaceDown = false;
         QPoint m_lastPan;

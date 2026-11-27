@@ -51,6 +51,7 @@ struct ModelAsset
     QString defaultMaterial;
     QVector<ModelChildPart> children;
     AABB bounds;                      // includes children
+    bool skinned = false;             // has bones: placed as a SkinnedModelEntity
 };
 
 // .kmodel assets shared by every viewport. Paths are content-relative like the map's "Model" values.
@@ -71,6 +72,9 @@ public:
     // places it (Angles, Scale, unit and axis conversion).
     static QMatrix4x4 placement(const MapObject &o);
     static AABB worldBounds(const ModelAsset &model, const QMatrix4x4 &placement);
+    // Nearest triangle of the model (children excluded) hit by the ray: index into model.sections,
+    // -1 for none. *t is in the ray's units.
+    static int pickSection(const ModelAsset &model, const QMatrix4x4 &placement, const Ray &ray, float *t);
 
 signals:
     void changed();

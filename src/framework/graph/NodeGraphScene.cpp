@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QClipboard>
+#include <QGraphicsSceneMouseEvent>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QPen>
@@ -55,6 +56,21 @@ namespace nodegraph
         disconnect(this, nullptr, this, nullptr);
         blockSignals(true);
         clear();
+    }
+
+    void NodeGraphScene::mouseDoubleClickEvent(QGraphicsSceneMouseEvent* e)
+    {
+        for (QGraphicsItem* item : items(e->scenePos()))
+        {
+            if (item->type() == PortItem::Type) break;
+            if (item->type() == NodeItem::Type)
+            {
+                emit nodeDoubleClicked(static_cast<NodeItem*>(item)->nodeId());
+                e->accept();
+                return;
+            }
+        }
+        QGraphicsScene::mouseDoubleClickEvent(e);
     }
 
     void NodeGraphScene::onNodeAdded(int id)

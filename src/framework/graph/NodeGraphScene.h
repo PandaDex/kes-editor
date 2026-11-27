@@ -46,7 +46,11 @@ namespace nodegraph
     signals:
         void nodePopupRequested(const QPointF& scenePos, int fromNode, int fromPort, bool fromIsOutput);
         void selectionIdsChanged(const QList<int>& ids);
+        void nodeDoubleClicked(int id);
         void statusMessage(const QString& text);
+
+    protected:
+        void mouseDoubleClickEvent(QGraphicsSceneMouseEvent* e) override;
 
     private slots:
         void onNodeAdded(int id);

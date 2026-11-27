@@ -57,7 +57,12 @@ void GraphParamsPanel::rebuild()
         const std::string name = p.name;
         const float value = instance.GetValue(name);
         QWidget* editor = nullptr;
-        if (p.type == AnimPortType::Bool) {
+        if (p.trigger) {
+            auto* fire = new QPushButton("Fire");
+            fire->setToolTip("Stays set until a transition uses it");
+            connect(fire, &QPushButton::clicked, this, [this, name] { m_preview->graphInstance().SetTrigger(name); });
+            editor = fire;
+        } else if (p.type == AnimPortType::Bool) {
             auto* cb = new QCheckBox;
             cb->setChecked(value > 0.5f);
             connect(cb, &QCheckBox::toggled, this, [this, name](bool v) { m_preview->graphInstance().SetBool(name, v); });

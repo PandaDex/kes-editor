@@ -13,7 +13,8 @@
 
 namespace kme {
 
-class GraphModel;
+class AnimGraphDocument;
+struct AnimGraphIds;
 class ModelDocument;
 
 class PreviewState : public QObject {
@@ -22,7 +23,8 @@ public:
     enum class Mode { BindPose, Clip, Graph };
 
     // graph is null where there is no animation graph (Graph mode then does nothing)
-    PreviewState(ModelDocument* doc, GraphModel* graph, QObject* parent = nullptr);
+    PreviewState(ModelDocument* doc, AnimGraphDocument* graph, QObject* parent = nullptr);
+    ~PreviewState() override;
 
     void setContentRoot(const QString& root);
     const QString& contentRoot() const { return m_contentRoot; }
@@ -48,6 +50,8 @@ public:
     void rebuildGraph();
     const QString& graphError() const { return m_graphError; }
     AnimBlendTreeInstance& graphInstance() { return m_instance; }
+    // maps editor node/state ids to the instance's ids
+    const AnimGraphIds& graphIds() const { return *m_ids; }
     void restartGraph();
 
     // total playback time, drives child model animations
@@ -68,7 +72,8 @@ private:
     void evaluate(float dt);
 
     ModelDocument* m_doc;
-    GraphModel* m_graph;
+    AnimGraphDocument* m_graph;
+    std::unique_ptr<AnimGraphIds> m_ids;
     QString m_contentRoot;
     Mode m_mode = Mode::BindPose;
 

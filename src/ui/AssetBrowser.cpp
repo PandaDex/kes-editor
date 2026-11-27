@@ -50,26 +50,7 @@ namespace
                info.suffix().compare("fmapc", Qt::CaseInsensitive) == 0;
     }
 
-    QIcon materialThumbnail(const MaterialInfo &info)
-    {
-        constexpr int size = 128;
-        QPixmap pixmap(size, size);
-        if (!info.texture.isNull())
-        {
-            QImage image = info.texture.scaled(size, size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
-                               .convertToFormat(QImage::Format_ARGB32);
-            QPainter p(&image);
-            p.setCompositionMode(QPainter::CompositionMode_Multiply);
-            p.fillRect(image.rect(), info.color);
-            p.end();
-            pixmap = QPixmap::fromImage(image);
-        }
-        else
-        {
-            pixmap.fill(info.color);
-        }
-        return QIcon(pixmap);
-    }
+    QIcon materialIcon(const MaterialInfo &info) { return QIcon(materialThumbnail(info, 128)); }
 
     // Drag pixmaps and other places that only take the decoration.
     QIcon typeIcon(const QString &suffix)
@@ -192,7 +173,7 @@ private:
             if (cached != m_thumbnails.cend())
                 return cached.value();
             if (const MaterialInfo *info = m_ctx->materials()->find(material))
-                return m_thumbnails.insert(material, materialThumbnail(*info)).value();
+                return m_thumbnails.insert(material, materialIcon(*info)).value();
             return {};
         }
         const QFileInfo info = m_files->fileInfo(mapToSource(index));
@@ -360,9 +341,6 @@ AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget 
     connect(m_pathBar, &AssetPathBar::navigate, this, [this](const QString &folder)
             { showFolder(folder); });
 
-    m_current = new QLabel(this);
-    m_current->setObjectName("Muted");
-    m_current->setToolTip(tr("Material used by the Material tool and given to new brushes"));
     auto *refresh = new QToolButton(this);
     refresh->setIcon(kes::style::icon("refresh"));
     refresh->setToolTip(tr("Rescan materials and refresh thumbnails"));
@@ -377,7 +355,6 @@ AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget 
     top->addWidget(m_forward);
     top->addWidget(m_pathBar, 1);
     top->addSpacing(6);
-    top->addWidget(m_current);
     top->addWidget(refresh);
     auto *topBar = new QWidget(this);
     topBar->setObjectName("AssetTopBar");
@@ -459,8 +436,6 @@ AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget 
         m_ctx->materials()->reload(); });
     connect(ctx->materials(), &MaterialLibrary::changed, this, [this]
             { m_proxy->clearThumbnails(); });
-    connect(ctx, &EditorContext::currentMaterialChanged, this, [this]
-            { updateCurrent(); });
     connect(ctx, &EditorContext::projectDirChanged, this, [this]
             { setRoot(m_ctx->projectDir()); });
     connect(importer, &AssetImporter::imported, this, [this](const QStringList &outputs)
@@ -472,7 +447,6 @@ AssetBrowser::AssetBrowser(EditorContext *ctx, AssetImporter *importer, QWidget 
     m_zoom->setValue(std::clamp(savedThumb, kThumbMin, kThumbMax));
     setThumbSize(m_zoom->value());
     setRoot(ctx->projectDir());
-    updateCurrent();
 }
 
 void AssetBrowser::setRoot(const QString &dir)
@@ -1241,12 +1215,6 @@ void AssetBrowser::showTreeContextMenu(const QPoint &pos)
     menu.addAction(tr("Show in Explorer"), this, [folder]
                    { QDesktopServices::openUrl(QUrl::fromLocalFile(folder)); });
     menu.exec(m_tree->viewport()->mapToGlobal(pos));
-}
-
-void AssetBrowser::updateCurrent()
-{
-    const QString current = m_ctx->currentMaterial();
-    m_current->setText(current.isEmpty() ? tr("Material: (none)") : tr("Material: %1").arg(QFileInfo(current).completeBaseName()));
 }
 
 ConsolePanel::ConsolePanel(EditorContext *ctx, QWidget *parent) : QPlainTextEdit(parent)

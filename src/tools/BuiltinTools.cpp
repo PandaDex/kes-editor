@@ -1230,14 +1230,30 @@ QWidget *BlockTool::createOptionsPanel(QWidget *parent)
     return w;
 }
 
+namespace
+{
+    // Solid classes are placed as a box resting on the clicked point, resized afterwards like any brush.
+    constexpr float kSolidEntityBox = 64.f;
+
+    AABB entityPreviewBox(const ClassDef &def, const QVector3D &pt)
+    {
+        if (def.kind == ClassKind::Solid)
+        {
+            const float h = kSolidEntityBox * 0.5f;
+            return AABB(pt + QVector3D(-h, -h, 0.f), pt + QVector3D(h, h, kSolidEntityBox));
+        }
+        return AABB(pt + (def.hasSize ? def.mins : QVector3D(-8, -8, -8)), pt + (def.hasSize ? def.maxs : QVector3D(8, 8, 8)));
+    }
+}
+
 void EntityTool::mousePress(Viewport *vp, QMouseEvent *e)
 {
     if (e->button() != Qt::LeftButton)
         return;
     const ClassDef *def = m_ctx->registry()->resolved(m_ctx->entityClass());
-    if (!def || def->kind != ClassKind::Point)
+    if (!def || def->kind == ClassKind::Base)
     {
-        m_ctx->log(tr("Entity tool: pick a point entity class in Tool Options first."), LogLevel::Warning);
+        m_ctx->log(tr("Entity tool: pick an entity class in Tool Options first."), LogLevel::Warning);
         return;
     }
     QVector3D pt;
@@ -1245,7 +1261,16 @@ void EntityTool::mousePress(Viewport *vp, QMouseEvent *e)
         return;
     MapObject o;
     o.origin = m_ctx->snap(pt);
-    applyClassDefaults(o, *def);
+    if (def->kind == ClassKind::Solid)
+    {
+        o.solid = true;
+        applyClassDefaults(o, *def);
+        o.setWorldBrushes({Brush::box(entityPreviewBox(*def, o.origin), m_ctx->currentMaterial())});
+    }
+    else
+    {
+        applyClassDefaults(o, *def);
+    }
     o.name = m_ctx->doc()->uniqueName(def->name);
     m_ctx->doc()->addObject(o, tr("Create Entity"));
 }
@@ -1265,9 +1290,9 @@ void EntityTool::draw(Viewport *, Batch &b)
     if (!m_hover)
         return;
     const ClassDef *def = m_ctx->registry()->resolved(m_ctx->entityClass());
-    if (!def || def->kind != ClassKind::Point)
+    if (!def || def->kind == ClassKind::Base)
         return;
-    const AABB bb(m_hoverPt + (def->hasSize ? def->mins : QVector3D(-8, -8, -8)), m_hoverPt + (def->hasSize ? def->maxs : QVector3D(8, 8, 8)));
+    const AABB bb = entityPreviewBox(*def, m_hoverPt);
     QColor c = def->hasColor ? def->color : QColor(80, 160, 255);
     b.wireBox(bb, c.lighter(130), true);
     c.setAlpha(70);
@@ -1288,7 +1313,7 @@ QWidget *EntityTool::createOptionsPanel(QWidget *parent)
     auto *desc = new QLabel(w);
     desc->setWordWrap(true);
     desc->setMinimumHeight(48);
-    lay->addWidget(new QLabel(tr("Point entity class"), w));
+    lay->addWidget(new QLabel(tr("Entity class"), w));
     lay->addWidget(filter);
     lay->addWidget(tree, 1);
     desc->hide();
@@ -1321,6 +1346,7 @@ QWidget *EntityTool::createOptionsPanel(QWidget *parent)
         const QString f = filter->text().trimmed();
 
         QVector<const ClassDef *> defs = ctx->registry()->classes(ClassKind::Point);
+        defs += ctx->registry()->classes(ClassKind::Solid);
         QVector<QPair<QString, const ClassDef *>> rows;
         for (const ClassDef *c : defs)
         {
@@ -1365,8 +1391,20 @@ QWidget *EntityTool::createOptionsPanel(QWidget *parent)
             QTreeWidgetItem *parent = groupItem(path);
             auto *it = parent ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(tree);
             const ClassDef *r = ctx->registry()->resolved(c->name);
+            const QColor colour = r && r->hasColor ? r->color : QColor(80, 160, 255);
             QPixmap pm(12, 12);
-            pm.fill(r && r->hasColor ? r->color : QColor(80, 160, 255));
+            if (c->kind == ClassKind::Solid)
+            {
+                // outlined swatch = brush entity
+                pm.fill(Qt::transparent);
+                QPainter p(&pm);
+                p.setPen(QPen(colour, 2));
+                p.drawRect(1, 1, 10, 10);
+            }
+            else
+            {
+                pm.fill(colour);
+            }
             it->setIcon(0, QIcon(pm));
             it->setText(0, c->name);
             it->setData(0, kClassRole, c->name);

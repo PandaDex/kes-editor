@@ -1,4 +1,5 @@
 #include "core/MaterialLibrary.h"
+#include <QPainter>
 #include <QDataStream>
 #include <QDir>
 #include <QDirIterator>
@@ -278,4 +279,21 @@ QImage MaterialLibrary::loadMaterialTexture(const QString &path) const
         file = QFileInfo::exists(fallback) ? fallback : byName;
     }
     return loadTexture(file);
+}
+
+QPixmap materialThumbnail(const MaterialInfo &info, int size)
+{
+    if (info.texture.isNull())
+    {
+        QPixmap pixmap(size, size);
+        pixmap.fill(info.color);
+        return pixmap;
+    }
+    QImage image = info.texture.scaled(size, size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                       .convertToFormat(QImage::Format_ARGB32);
+    QPainter p(&image);
+    p.setCompositionMode(QPainter::CompositionMode_Multiply);
+    p.fillRect(image.rect(), info.color);
+    p.end();
+    return QPixmap::fromImage(image);
 }

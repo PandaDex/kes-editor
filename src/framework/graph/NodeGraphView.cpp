@@ -26,7 +26,7 @@ namespace nodegraph
         constexpr double kMaxZoom = 3.0;
     }
 
-    NodeGraphView::NodeGraphView(NodeGraphScene* scene, QWidget* parent)
+    NodeGraphView::NodeGraphView(QGraphicsScene* scene, QWidget* parent)
         : QGraphicsView(scene, parent), m_scene(scene)
     {
         if (!qEnvironmentVariableIsSet("FORGE_GRAPH_SOFTWARE_RENDER"))
@@ -101,13 +101,22 @@ namespace nodegraph
         emit zoomChanged(zoomLevel());
     }
 
+    QRectF NodeGraphView::contentRect(bool selectedOnly) const
+    {
+        if (auto* nodes = qobject_cast<NodeGraphScene*>(m_scene)) return nodes->nodesBoundingRect(selectedOnly);
+        QRectF r;
+        for (QGraphicsItem* item : selectedOnly ? m_scene->selectedItems() : m_scene->items())
+            if (item->isVisible() && !item->parentItem()) r |= item->sceneBoundingRect();
+        return r;
+    }
+
     void NodeGraphView::frameAll()
     {
-        fitRect(m_scene->nodesBoundingRect(false));
+        fitRect(contentRect(false));
     }
     void NodeGraphView::frameSelection()
     {
-        const QRectF r = m_scene->nodesBoundingRect(true);
+        const QRectF r = contentRect(true);
         if (r.isNull())
             frameAll();
         else

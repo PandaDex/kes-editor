@@ -3,6 +3,7 @@
 #include "anim_blend_tree.h"
 
 #include <QJsonArray>
+#include <QSet>
 
 namespace kme
 {
@@ -140,13 +141,26 @@ namespace kme
     {
         AnimBlendTreeData tree;
         tree.modelPath = m_modelPath.toStdString();
+        int32_t next = 1;
+        appendToBlendTree(tree, 0, next, nullptr);
+        return tree;
+    }
+
+    void GraphModel::appendToBlendTree(AnimBlendTreeData& tree, int32_t graphId, int32_t& nextNodeId, QHash<int, int>* localToFile) const
+    {
+        QHash<int, int> ids;
+        for (int id : nodeIds())
+            if (def(id)) ids.insert(id, nextNodeId++);
+        if (localToFile) *localToFile = ids;
+
         for (int id : nodeIds())
         {
             const GraphNode& n = *node(id);
             const NodeDef* d = def(id);
             if (!d) continue;
             AnimBlendTreeNode out;
-            out.id = id;
+            out.id = ids.value(id);
+            out.graph = graphId;
             out.type = n.type.toStdString();
             out.position[0] = float(n.pos.x());
             out.position[1] = float(n.pos.y());
@@ -170,17 +184,24 @@ namespace kme
             const NodeDef* df = def(c.fromNode);
             const NodeDef* dt = def(c.toNode);
             if (!df || !dt) continue;
-            tree.links.push_back({ c.fromNode, df->outputs.value(c.fromPort).name.toStdString(), c.toNode,
+            tree.links.push_back({ ids.value(c.fromNode), df->outputs.value(c.fromPort).name.toStdString(), ids.value(c.toNode),
                 dt->inputs.value(c.toPort).name.toStdString() });
         }
-        return tree;
     }
 
     void GraphModel::loadBlendTree(const AnimBlendTreeData& tree, QStringList* warnings)
     {
+        loadJson(graphJson(tree, 0), warnings);
+    }
+
+    QJsonObject GraphModel::graphJson(const AnimBlendTreeData& tree, int32_t graphId) const
+    {
         QJsonArray nodes;
+        QSet<int32_t> inGraph;
         for (const AnimBlendTreeNode& n : tree.nodes)
         {
+            if (n.graph != graphId) continue;
+            inGraph.insert(n.id);
             const QString type = QString::fromStdString(n.type);
             const NodeDef* d = catalog().find(type);
             QJsonObject o;
@@ -218,6 +239,7 @@ namespace kme
         QJsonArray conns;
         for (const AnimBlendTreeLink& l : tree.links)
         {
+            if (!inGraph.contains(l.fromNode) || !inGraph.contains(l.toNode)) continue;
             QJsonObject o;
             o["from"] = l.fromNode;
             o["fromPort"] = QString::fromStdString(l.fromPort);
@@ -227,10 +249,10 @@ namespace kme
         }
         QJsonObject root;
         root["format"] = domain().format();
-        root["model"] = QString::fromStdString(tree.modelPath);
+        if (graphId == 0) root["model"] = QString::fromStdString(tree.modelPath);
         root["nodes"] = nodes;
         root["connections"] = conns;
-        loadJson(root, warnings);
+        return root;
     }
 
 } // namespace kme

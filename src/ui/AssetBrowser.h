@@ -60,7 +60,6 @@ private:
     QString materialPath(const QModelIndex &proxyIndex) const;
     void applyToSelection(const QString &material);
     void showContextMenu(const QPoint &pos);
-    void updateCurrent();
     QStringList selectedPaths() const;
     QStringList draggedEntries(const QDropEvent *e) const;
     bool canMoveInto(const QStringList &entries, const QString &folder) const;
@@ -81,7 +80,6 @@ private:
     QTreeView *m_tree;
     QListView *m_list;
     QLineEdit *m_filter;
-    QLabel *m_current;
     QLabel *m_count = nullptr;
     QSlider *m_zoom = nullptr;
     QToolButton *m_back = nullptr;

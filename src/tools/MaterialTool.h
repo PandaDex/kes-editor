@@ -18,7 +18,7 @@ struct MaterialFaceRef
 
 namespace MaterialOps
 {
-    bool pickFace(EditorContext *ctx, Viewport *vp, const QPointF &pos, MaterialFaceRef &out);
+    bool pickFace(EditorContext *ctx, Viewport *vp, const QPointF &pos, MaterialFaceRef &out, float *distance = nullptr);
     void applyToFaces(EditorContext *ctx, const QVector<MaterialFaceRef> &faces, const QString &material, const QString &undoText);
     bool applyToObjects(EditorContext *ctx, const QList<ObjectId> &ids, const QString &material);
     // A material dropped on a viewport: the face under the cursor in 3D (whole object with
@@ -53,7 +53,10 @@ private:
     void pruneSelection();
 
     QVector<FaceRef> m_selectedFaces;
+    void updateMaterialLabel();
+
     QPointer<QLabel> m_materialLabel;
+    QPointer<QLabel> m_materialThumb;
     QPointer<QDoubleSpinBox> m_scaleU, m_scaleV, m_offsetU, m_offsetV, m_rotation;
     bool m_updatingFields = false;
 };

@@ -3,11 +3,16 @@
 #include "framework/EditorModule.h"
 #include "framework/EditorTab.h"
 
+#include <QHash>
+#include <QPointer>
 #include <QStringList>
+#include <QVector>
 #include <functional>
 
+class QAction;
 class QLabel;
 class QSplitter;
+class QStackedWidget;
 
 namespace nodegraph
 {
@@ -17,8 +22,11 @@ namespace nodegraph
 namespace kme
 {
 
+    class AnimGraphDocument;
     class AnimationPanel;
     class AttachmentPanel;
+    class StateMachineEditor;
+    class StateMachineModel;
     class GraphModel;
     class GraphParamsPanel;
     class ModelDocument;
@@ -55,12 +63,13 @@ namespace kme
         QLabel* m_statusContent = nullptr;
     };
 
-    // .ag: animation blend tree, previewed live on the model the graph names.
+    // .ag: animation blend tree with nested state machines, previewed live on the model the graph names.
     class AnimGraphTab : public EditorTab
     {
         Q_OBJECT
     public:
         explicit AnimGraphTab(EditorContext* ctx, QWidget* parent = nullptr);
+        ~AnimGraphTab() override;
 
         QString filePath() const override { return m_graphPath; }
         QString displayName() const override;
@@ -79,10 +88,41 @@ namespace kme
         void rescanClips();
         QWidget* clipEditor(int nodeId, const QString& current, const std::function<void(const QVariant&)>& apply);
 
+        // One level of the breadcrumb: a graph, or a state machine.
+        struct Layer
+        {
+            QPointer<GraphModel> graph;
+            QPointer<StateMachineModel> machine;
+        };
+        nodegraph::GraphEditor* graphEditor(GraphModel* graph);
+        StateMachineEditor* machineEditor(StateMachineModel* machine);
+        void dropGraphEditor(GraphModel* graph);
+        void dropMachineEditor(StateMachineModel* machine);
+        void openMachine(GraphModel* graph, int nodeId);
+        void openState(StateMachineModel* machine, int stateId);
+        void goToDepth(int depth);
+        void validatePath();
+        void showCurrentLayer();
+        void rebuildBreadcrumbs();
+        void updateWeights();
+        nodegraph::GraphEditor* currentGraphEditor() const;
+        StateMachineEditor* currentMachineEditor() const;
+
         ModelDocument* m_doc;
+        AnimGraphDocument* m_graphDoc;
         GraphModel* m_graph;
         PreviewState* m_preview;
-        nodegraph::GraphEditor* m_editor;
+        QHash<GraphModel*, nodegraph::GraphEditor*> m_editors;
+        QHash<StateMachineModel*, StateMachineEditor*> m_machineEditors;
+        QHash<QObject*, QWidget*> m_inspectorScrolls;
+        QVector<Layer> m_path;
+        QWidget* m_breadcrumbs = nullptr;
+        QStackedWidget* m_canvas = nullptr;
+        QStackedWidget* m_inspectors = nullptr;
+        QStackedWidget* m_libraries = nullptr;
+        QWidget* m_emptyLibrary = nullptr;
+        QList<QAction*> m_graphOnlyActions;
+        QAction* m_snap = nullptr;
         ModelViewport* m_view = nullptr;
         GraphParamsPanel* m_params = nullptr;
         AnimationPanel* m_animation = nullptr;

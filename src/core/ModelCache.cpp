@@ -230,6 +230,7 @@ const ModelAsset *ModelCache::find(const QString &path)
         {
             auto asset = std::make_shared<ModelAsset>();
             asset->defaultMaterial = QString::fromStdString(data.defaultMaterial);
+            asset->skinned = !data.bones.empty();
             asset->vertices.reserve(int(mesh.vertices.size()));
             for (const MeshVertex &v : mesh.vertices)
             {
@@ -289,4 +290,49 @@ AABB ModelCache::worldBounds(const ModelAsset &model, const QMatrix4x4 &placemen
         out.expand(placement.map(corner));
     }
     return out;
+}
+
+int ModelCache::pickSection(const ModelAsset &model, const QMatrix4x4 &placement, const Ray &ray, float *t)
+{
+    if (!model.bounds.valid() || !worldBounds(model, placement).intersect(ray))
+        return -1;
+    // The direction isn't renormalised, so t stays the world ray's parameter.
+    const QMatrix4x4 inverse = placement.inverted();
+    const QVector3D origin = inverse.map(ray.origin);
+    const QVector3D dir = inverse.mapVector(ray.dir);
+    float best = 1e30f;
+    int hit = -1;
+    for (int s = 0; s < model.sections.size(); ++s)
+    {
+        const ModelSection &section = model.sections[s];
+        const int end = std::min(int(model.indices.size()), section.firstIndex + section.indexCount);
+        for (int i = section.firstIndex; i + 2 < end; i += 3)
+        {
+            const QVector3D a = model.vertices[int(model.indices[i])].position;
+            const QVector3D e1 = model.vertices[int(model.indices[i + 1])].position - a;
+            const QVector3D e2 = model.vertices[int(model.indices[i + 2])].position - a;
+            const QVector3D p = QVector3D::crossProduct(dir, e2);
+            const float det = QVector3D::dotProduct(e1, p);
+            if (std::abs(det) < 1e-12f)
+                continue;
+            const float inv = 1.f / det;
+            const QVector3D tv = origin - a;
+            const float u = QVector3D::dotProduct(tv, p) * inv;
+            if (u < 0.f || u > 1.f)
+                continue;
+            const QVector3D q = QVector3D::crossProduct(tv, e1);
+            const float v = QVector3D::dotProduct(dir, q) * inv;
+            if (v < 0.f || u + v > 1.f)
+                continue;
+            const float d = QVector3D::dotProduct(e2, q) * inv;
+            if (d > 0.f && d < best)
+            {
+                best = d;
+                hit = s;
+            }
+        }
+    }
+    if (hit >= 0 && t)
+        *t = best;
+    return hit;
 }
