@@ -98,6 +98,13 @@ void ModelDocument::edit(const QString& text, const std::function<void(KModelDat
     if (!isOpen()) return;
     ModelAttachments before = attachments();
     fn(m_model);
+    // Generated LODs draw each part with the slot its LOD 0 primitive has.
+    if (m_model.autoLods) {
+        for (KModelMesh& mesh : m_model.meshes)
+            for (KModelMeshLod& lod : mesh.lods)
+                for (size_t p = 0; p < lod.primitives.size() && p < mesh.primitives.size(); ++p)
+                    lod.primitives[p].materialIndex = mesh.primitives[p].materialIndex;
+    }
     m_undo.push(new AttachmentCommand(this, std::move(before), attachments(), text, mergeKey));
     emit attachmentsChanged();
 }
@@ -105,9 +112,12 @@ void ModelDocument::edit(const QString& text, const std::function<void(KModelDat
 ModelAttachments ModelDocument::attachments() const
 {
     ModelAttachments a{m_model.sockets, m_model.colliders, m_model.children, m_model.defaultMaterial, m_model.materials, {}};
+    a.lods = m_model.lods;
+    a.autoLods = m_model.autoLods;
     for (const KModelMesh& mesh : m_model.meshes) {
         std::vector<int32_t>& ids = a.primitiveSlots.emplace_back();
         for (const KModelPrimitive& primitive : mesh.primitives) ids.push_back(primitive.materialIndex);
+        a.meshLods.push_back(mesh.lods);
     }
     return a;
 }
@@ -119,6 +129,10 @@ void ModelDocument::setAttachments(const ModelAttachments& a)
     m_model.children = a.children;
     m_model.defaultMaterial = a.defaultMaterial;
     m_model.materials = a.materials;
+    m_model.lods = a.lods;
+    m_model.autoLods = a.autoLods;
+    for (size_t m = 0; m < m_model.meshes.size() && m < a.meshLods.size(); ++m)
+        m_model.meshes[m].lods = a.meshLods[m];
     for (size_t m = 0; m < m_model.meshes.size() && m < a.primitiveSlots.size(); ++m) {
         std::vector<KModelPrimitive>& primitives = m_model.meshes[m].primitives;
         for (size_t p = 0; p < primitives.size() && p < a.primitiveSlots[m].size(); ++p)

@@ -53,7 +53,7 @@ private:
 class AttachmentPanel : public QWidget {
     Q_OBJECT
 public:
-    AttachmentPanel(ModelDocument* doc, const PreviewState* preview, QWidget* parent = nullptr);
+    AttachmentPanel(ModelDocument* doc, PreviewState* preview, QWidget* parent = nullptr);
 
 private:
     void rebuild();
@@ -63,13 +63,14 @@ private:
     void buildNode(QVBoxLayout* lay, int index);
     void buildModel(QVBoxLayout* lay);
     void buildMaterialSlots(QVBoxLayout* lay, std::vector<std::function<void()>>& refreshers);
+    void buildLods(QVBoxLayout* lay, std::vector<std::function<void()>>& refreshers);
     void buildChild(QFormLayout* form, int index);
     QComboBox* boneCombo(int current);
     void fitColliderToBone(int index);
     void fitColliderToMesh(int index);
 
     ModelDocument* m_doc;
-    const PreviewState* m_preview;
+    PreviewState* m_preview;
     QVBoxLayout* m_root;
     QWidget* m_content = nullptr;
     std::function<void()> m_refresh;

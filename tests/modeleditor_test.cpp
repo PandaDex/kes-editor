@@ -158,6 +158,23 @@ int main(int argc, char** argv)
     doc.undoStack()->redo();
     doc.undoStack()->redo();
     EXPECT(doc.model().materials.size() == 1 && doc.model().meshes[0].primitives[0].materialIndex == 0);
+
+    doc.edit("Generate LODs", [&](KModelData& m)
+        {
+        SetDefaultKModelLodLevels(m, 2);
+        m.autoLods = true;
+        GenerateKModelLods(m); });
+    EXPECT(doc.model().meshes[0].lods.size() == 2);
+    EXPECT(doc.model().meshes[0].lods[1].primitives.size() == 1 && doc.model().meshes[0].lods[1].primitives[0].materialIndex == 0);
+    doc.edit("Assign material slot", [&](KModelData& m)
+        { m.meshes[0].primitives[0].materialIndex = -1; });
+    EXPECT(doc.model().meshes[0].lods[1].primitives[0].materialIndex == -1); // generated LODs follow LOD 0
+    doc.undoStack()->undo();
+    EXPECT(doc.model().meshes[0].lods[1].primitives[0].materialIndex == 0);
+    doc.undoStack()->undo();
+    EXPECT(doc.model().lods.empty() && doc.model().meshes[0].lods.empty() && !doc.model().autoLods);
+    doc.undoStack()->redo();
+    EXPECT(doc.model().autoLods && doc.model().meshes[0].lods.size() == 2);
     EXPECT(doc.isModified());
     EXPECT(doc.save(&error));
     EXPECT(!doc.isModified());
@@ -172,6 +189,7 @@ int main(int argc, char** argv)
     EXPECT(saved.defaultMaterial == "materials/skin.mat");
     EXPECT(saved.materials.size() == 1 && saved.materials[0].materialPath == "materials/glass.mat");
     EXPECT(saved.meshes[0].primitives[0].materialIndex == 0);
+    EXPECT(saved.autoLods && saved.lods.size() == 2 && saved.meshes[0].lods.size() == 2);
 
     kme::GraphModel graph;
     const int clip = graph.addNode("Clip", { 0, 0 });

@@ -14,6 +14,7 @@ if(NOT EXISTS "${KES_ENGINE_DIR}/kmodel.h")
 endif()
 add_library(forge_engine STATIC
     ${KES_ENGINE_DIR}/kmodel.cpp
+    ${KES_ENGINE_DIR}/kmodel_lod.cpp
     ${KES_ENGINE_DIR}/animation_pose.cpp
     ${KES_ENGINE_DIR}/animation_clip.cpp
     ${KES_ENGINE_DIR}/anim_blend_tree.cpp
@@ -25,6 +26,18 @@ add_library(forge_engine STATIC
     engine/EngineFileIo.cpp)
 target_include_directories(forge_engine PUBLIC ${KES_ENGINE_DIR})
 target_compile_definitions(forge_engine PUBLIC KES_PROFILING=0 _CRT_SECURE_NO_WARNINGS NOMINMAX)
+
+# meshoptimizer for LOD generation (engine/kmodel_lod.cpp), same submodule as cmake/KesMeshOptimizer.cmake.
+if(NOT TARGET meshoptimizer)
+    set(_forge_meshopt_dir "${KES_ENGINE_DIR}/../external/meshoptimizer")
+    if(NOT EXISTS "${_forge_meshopt_dir}/CMakeLists.txt")
+        message(FATAL_ERROR "Forge: ${_forge_meshopt_dir} missing; git submodule update --init external/meshoptimizer")
+    endif()
+    set(MESHOPT_INSTALL OFF CACHE BOOL "" FORCE)
+    set(MESHOPT_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${_forge_meshopt_dir}" "${CMAKE_BINARY_DIR}/external/meshoptimizer" EXCLUDE_FROM_ALL)
+endif()
+target_link_libraries(forge_engine PRIVATE meshoptimizer)
 
 # RmlUi + FreeType for the .rml preview, the same submodules and options as cmake/KesUi.cmake,
 # always static here.

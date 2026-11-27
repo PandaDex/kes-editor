@@ -1,5 +1,6 @@
 #include "assets/ModelImportDialog.h"
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileDialog>
@@ -10,7 +11,9 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSettings>
+#include <QSpinBox>
 #include <QVBoxLayout>
+#include <algorithm>
 
 ModelImportDialog::ModelImportDialog(const QStringList &files, const QString &projectDir, QWidget *parent)
     : QDialog(parent), m_projectDir(projectDir)
@@ -50,7 +53,19 @@ ModelImportDialog::ModelImportDialog(const QStringList &files, const QString &pr
     auto *targetRow = new QHBoxLayout;
     targetRow->addWidget(m_target, 1);
     targetRow->addWidget(m_browse);
+    m_lodMode = new QComboBox;
+    m_lodMode->addItem(tr("Keep existing"), -1);
+    m_lodMode->addItem(tr("None"), 0);
+    m_lodMode->addItem(tr("Generate"), 1);
+    m_lodMode->setToolTip(tr("Meshes named <mesh>_LOD<n> in the source are used as LODs instead."));
+    m_lodCount = new QSpinBox;
+    m_lodCount->setRange(1, 8);
+    m_lodCount->setSuffix(tr(" levels"));
+    auto *lodRow = new QHBoxLayout;
+    lodRow->addWidget(m_lodMode, 1);
+    lodRow->addWidget(m_lodCount);
     auto *form = new QFormLayout;
+    form->addRow(tr("LODs"), lodRow);
     form->addRow(tr("Target model"), targetRow);
     layout->addLayout(form);
 
@@ -62,10 +77,13 @@ ModelImportDialog::ModelImportDialog(const QStringList &files, const QString &pr
     m_mesh->setChecked(!m_animatable || settings.value("import/model/mesh", true).toBool());
     m_animations->setChecked(m_animatable && settings.value("import/model/animations", true).toBool());
     m_target->setText(QDir::toNativeSeparators(settings.value("import/model/target").toString()));
+    m_lodMode->setCurrentIndex(std::max(0, m_lodMode->findData(settings.value("import/model/lodMode", -1).toInt())));
+    m_lodCount->setValue(settings.value("import/model/lodCount", 3).toInt());
 
     connect(m_mesh, &QCheckBox::toggled, this, &ModelImportDialog::updateState);
     connect(m_animations, &QCheckBox::toggled, this, &ModelImportDialog::updateState);
     connect(m_browse, &QPushButton::clicked, this, &ModelImportDialog::browseTarget);
+    connect(m_lodMode, &QComboBox::currentIndexChanged, this, &ModelImportDialog::updateState);
     connect(m_buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(m_buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     updateState();
@@ -77,6 +95,8 @@ void ModelImportDialog::updateState()
     const bool animationsOnly = !m_mesh->isChecked() && m_animations->isChecked();
     m_target->setEnabled(animationsOnly);
     m_browse->setEnabled(animationsOnly);
+    m_lodMode->setEnabled(m_mesh->isChecked());
+    m_lodCount->setEnabled(m_mesh->isChecked() && m_lodMode->currentData().toInt() > 0);
     m_buttons->button(QDialogButtonBox::Ok)->setEnabled(m_mesh->isChecked() || m_animations->isChecked());
 }
 
@@ -97,6 +117,8 @@ ModelImportChoice ModelImportDialog::choice() const
     c.animations = m_animations->isChecked();
     if (c.animations && !c.mesh)
         c.targetModel = QDir::fromNativeSeparators(m_target->text().trimmed());
+    const int mode = m_lodMode->currentData().toInt();
+    c.lodCount = mode > 0 ? m_lodCount->value() : mode;
     return c;
 }
 
@@ -112,5 +134,7 @@ bool ModelImportDialog::ask(const QStringList &files, const QString &projectDir,
     if (dialog.m_animatable)
         settings.setValue("import/model/animations", out.animations);
     settings.setValue("import/model/target", QDir::fromNativeSeparators(dialog.m_target->text().trimmed()));
+    settings.setValue("import/model/lodMode", dialog.m_lodMode->currentData().toInt());
+    settings.setValue("import/model/lodCount", dialog.m_lodCount->value());
     return true;
 }

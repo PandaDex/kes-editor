@@ -27,6 +27,9 @@ struct ModelAttachments {
     std::string defaultMaterial;
     std::vector<KModelMaterial> materials;
     std::vector<std::vector<int32_t>> primitiveSlots; // [mesh][primitive]
+    std::vector<KModelLodLevel> lods;
+    bool autoLods = false;
+    std::vector<std::vector<KModelMeshLod>> meshLods; // [mesh]
 };
 
 class ModelDocument : public QObject {

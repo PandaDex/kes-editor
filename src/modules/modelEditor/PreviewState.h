@@ -62,7 +62,17 @@ public:
     const std::vector<float>& nodeWorld() const { return m_nodeWorld; }
     const std::vector<float>& skin() const { return m_skin; }
 
+    // 0 = the full mesh, n = LOD n (clamped to what the model has when drawn)
+    int previewLod() const { return m_previewLod; }
+    void setPreviewLod(int lod)
+    {
+        if (lod == m_previewLod) return;
+        m_previewLod = lod;
+        emit previewLodChanged();
+    }
+
 signals:
+    void previewLodChanged();
     void poseChanged();
     void playbackChanged();
     void graphRebuilt();
@@ -86,6 +96,7 @@ private:
     float m_childTime = 0.0f;
     float m_speed = 1.0f;
     bool m_loop = true;
+    int m_previewLod = 0;
     QTimer m_timer;
     QElapsedTimer m_clock;
 

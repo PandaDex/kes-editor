@@ -5,6 +5,8 @@
 #include "ModelDocument.h"
 #include "PreviewState.h"
 
+#include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDir>
 #include <QDoubleSpinBox>
@@ -19,6 +21,7 @@
 #include <QPushButton>
 #include <QQuaternion>
 #include <QSignalBlocker>
+#include <QSpinBox>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <algorithm>
@@ -157,7 +160,7 @@ namespace kme
         return { float(m_spin[0]->value()), float(m_spin[1]->value()), float(m_spin[2]->value()) };
     }
 
-    AttachmentPanel::AttachmentPanel(ModelDocument* doc, const PreviewState* preview, QWidget* parent)
+    AttachmentPanel::AttachmentPanel(ModelDocument* doc, PreviewState* preview, QWidget* parent)
         : QWidget(parent), m_doc(doc), m_preview(preview)
     {
         m_root = new QVBoxLayout(this);
@@ -268,11 +271,15 @@ namespace kme
         refreshers.push_back([=, this]
             { material->setPath(QString::fromStdString(m_doc->model().defaultMaterial)); });
         buildMaterialSlots(lay, refreshers);
+        buildLods(lay, refreshers);
         const size_t builtSlots = m_doc->model().materials.size();
-        m_refresh = [this, refreshers, builtSlots]
+        const size_t builtLods = m_doc->model().lods.size();
+        const bool builtAuto = m_doc->model().autoLods;
+        m_refresh = [this, refreshers, builtSlots, builtLods, builtAuto]
         {
-            // adding or removing a slot (or undoing it) changes the rows, so build them again
-            if (m_doc->model().materials.size() != builtSlots)
+            // adding or removing a slot or LOD (or undoing it) changes the rows, so build them again
+            if (m_doc->model().materials.size() != builtSlots || m_doc->model().lods.size() != builtLods ||
+                m_doc->model().autoLods != builtAuto)
             {
                 QTimer::singleShot(0, this, &AttachmentPanel::rebuild);
                 return;
@@ -282,6 +289,144 @@ namespace kme
         };
         m_refresh();
 
+    }
+
+    // LOD levels: generated from triangle ratios (any change regenerates) or hand-made in the source file.
+    void AttachmentPanel::buildLods(QVBoxLayout* lay, std::vector<std::function<void()>>& refreshers)
+    {
+        const KModelData& model = m_doc->model();
+        lay->addSpacing(10);
+        auto* header = new QHBoxLayout;
+        auto* title = new QLabel("LODs");
+        title->setObjectName("Title");
+        auto* preview = new QComboBox;
+        preview->setToolTip("LOD shown in the viewport");
+        header->addWidget(title);
+        header->addStretch(1);
+        header->addWidget(preview);
+        lay->addLayout(header);
+
+        const auto triangles = [this](int level)
+        {
+            size_t count = 0;
+            for (const KModelMesh& mesh : m_doc->model().meshes)
+                count += (level == 0 || size_t(level) > mesh.lods.size() ? mesh.indices.size() : mesh.lods[size_t(level) - 1].indices.size()) / 3;
+            return count;
+        };
+        const int levelCount = int(model.lods.size());
+        for (int level = 0; level <= levelCount; ++level)
+            preview->addItem(QString("LOD %1").arg(level), level);
+        preview->setCurrentIndex(std::clamp(m_preview->previewLod(), 0, levelCount));
+        preview->setEnabled(levelCount > 0);
+        connect(preview, &QComboBox::activated, this, [this](int item) { m_preview->setPreviewLod(item); });
+
+        auto* form = new QFormLayout;
+        form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        lay->addLayout(form);
+
+        auto* autoGenerate = new QCheckBox("Generate");
+        autoGenerate->setToolTip("Simplify the mesh for each level, again on every re-import");
+        auto* levels = new QSpinBox;
+        levels->setRange(0, 8);
+        levels->setKeyboardTracking(false);
+        const bool handMade = levelCount > 0 && !model.autoLods;
+        if (handMade) levels->setToolTip("Hand-made LODs come from <mesh>_LOD<n> meshes in the source file");
+        levels->setEnabled(!handMade);
+        auto* levelRow = new QHBoxLayout;
+        levelRow->addWidget(levels, 1);
+        levelRow->addWidget(autoGenerate);
+        form->addRow("Levels", levelRow);
+        form->addRow("LOD 0", note(QString("%1 triangles").arg(triangles(0))));
+
+        connect(autoGenerate, &QCheckBox::toggled, this, [this](bool on)
+            {
+        if (on == m_doc->model().autoLods) return;
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        m_doc->edit(on ? "Generate LODs" : "Keep LODs", [&](KModelData& m)
+                    {
+            m.autoLods = on;
+            if (!on) return;
+            if (m.lods.empty()) SetDefaultKModelLodLevels(m, 3);
+            GenerateKModelLods(m); });
+        QApplication::restoreOverrideCursor(); });
+        connect(levels, &QSpinBox::valueChanged, this, [this](int count)
+            {
+        if (count == int(m_doc->model().lods.size())) return;
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        m_doc->edit("Set LOD count", [&](KModelData& m)
+                    {
+            if (count == 0) {
+                m.lods.clear();
+                m.autoLods = false;
+                for (KModelMesh& mesh : m.meshes) mesh.lods.clear();
+                return;
+            }
+            float last = m.lods.empty() ? 1.0f : m.lods.back().screenSize;
+            float ratio = m.lods.empty() ? 1.0f : m.lods.back().triangleRatio;
+            while (int(m.lods.size()) < count) {
+                last *= 0.5f;
+                ratio *= 0.5f;
+                m.lods.push_back({ last, ratio });
+            }
+            m.lods.resize(size_t(count));
+            m.autoLods = true;
+            GenerateKModelLods(m); });
+        QApplication::restoreOverrideCursor(); });
+
+        for (int level = 0; level < levelCount; ++level)
+        {
+            auto* screen = new QDoubleSpinBox;
+            screen->setRange(0.0, 1.0);
+            screen->setDecimals(3);
+            screen->setSingleStep(0.01);
+            screen->setKeyboardTracking(false);
+            screen->setToolTip("Drawn once the model covers less than this share of the screen height");
+            auto* ratio = new QSpinBox;
+            ratio->setRange(1, 100);
+            ratio->setSuffix(" %");
+            ratio->setKeyboardTracking(false);
+            ratio->setToolTip("Target triangles, of LOD 0");
+            ratio->setEnabled(model.autoLods);
+            auto* count = new QLabel;
+            count->setMinimumWidth(56);
+            count->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            auto* row = new QHBoxLayout;
+            row->addWidget(screen, 1);
+            row->addWidget(ratio, 1);
+            row->addWidget(count);
+            form->addRow(QString("LOD %1").arg(level + 1), row);
+
+            connect(screen, &QDoubleSpinBox::valueChanged, this, [this, level](double value)
+                {
+            if (size_t(level) >= m_doc->model().lods.size() || float(value) == m_doc->model().lods[size_t(level)].screenSize) return;
+            m_editing = true;
+            m_doc->edit("Set LOD screen size", [&](KModelData& m) { m.lods[size_t(level)].screenSize = float(value); },
+                        QString("lodScreen%1").arg(level));
+            m_editing = false; });
+            connect(ratio, &QSpinBox::valueChanged, this, [this, level](int percent)
+                {
+            if (size_t(level) >= m_doc->model().lods.size() || percent == qRound(m_doc->model().lods[size_t(level)].triangleRatio * 100.0f)) return;
+            QApplication::setOverrideCursor(Qt::WaitCursor);
+            m_doc->edit("Set LOD triangles", [&](KModelData& m)
+                        {
+                m.lods[size_t(level)].triangleRatio = float(percent) / 100.0f;
+                GenerateKModelLods(m); },
+                        QString("lodRatio%1").arg(level));
+            QApplication::restoreOverrideCursor(); });
+            refreshers.push_back([this, screen, ratio, count, level, triangles]
+                {
+            if (size_t(level) >= m_doc->model().lods.size()) return;
+            const KModelLodLevel& l = m_doc->model().lods[size_t(level)];
+            const QSignalBlocker b1(screen), b2(ratio);
+            screen->setValue(l.screenSize);
+            ratio->setValue(qRound(l.triangleRatio * 100.0f));
+            count->setText(QString::number(triangles(level + 1))); });
+        }
+        refreshers.push_back([this, levels, autoGenerate]
+            {
+        const QSignalBlocker b1(levels), b2(autoGenerate);
+        levels->setValue(int(m_doc->model().lods.size()));
+        autoGenerate->setChecked(m_doc->model().autoLods); });
     }
 
     // Slots (name + material) and, per mesh part, which slot it draws with.
@@ -345,11 +490,14 @@ namespace kme
                 { m_doc->edit("Remove material slot", [&](KModelData& m)
                       {
                 m.materials.erase(m.materials.begin() + index);
+                const auto remap = [index](KModelPrimitive& primitive) {
+                    if (primitive.materialIndex == index) primitive.materialIndex = -1;
+                    else if (primitive.materialIndex > index) --primitive.materialIndex;
+                };
                 for (KModelMesh& mesh : m.meshes) {
-                    for (KModelPrimitive& primitive : mesh.primitives) {
-                        if (primitive.materialIndex == index) primitive.materialIndex = -1;
-                        else if (primitive.materialIndex > index) --primitive.materialIndex;
-                    }
+                    for (KModelPrimitive& primitive : mesh.primitives) remap(primitive);
+                    for (KModelMeshLod& lod : mesh.lods)
+                        for (KModelPrimitive& primitive : lod.primitives) remap(primitive);
                 } }); });
             refreshers.push_back([this, name, path, index]
                 {

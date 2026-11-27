@@ -73,6 +73,7 @@ private:
         size_t indexCount;
         int mesh;
         int primitive; // -1 = mesh has no primitives
+        int lod = 0;
         int slot(const KModelData& model) const;
     };
     // unskinned vertices of all meshes, skin() outputs pos + normal + uv
@@ -81,8 +82,9 @@ private:
         std::vector<uint16_t> bones;
         std::vector<float> weights;
         std::vector<int> node;
-        std::vector<uint32_t> indices;
+        std::vector<uint32_t> indices; // LOD 0 of every mesh, then each LOD's triangles
         std::vector<Section> sections;
+        std::vector<std::vector<Section>> lodSections; // [lod - 1]
         void fill(const KModelData& model);
         void skin(const KModelData& model, const std::vector<float>& skinMatrices, const std::vector<float>& nodeWorld,
                   std::vector<float>& out) const;
@@ -126,6 +128,7 @@ private:
     bool childMatrix(int index, float out[16]) const;
 
     void rebuildStaticMesh();
+    size_t lodSignature() const;
     void skinMesh();
     void buildOverlayLines();
     void addLine(const QVector3D& a, const QVector3D& b, const QColor& c);
@@ -151,6 +154,7 @@ private:
     ModelDocument* m_doc;
     PreviewState* m_preview;
     Overlays m_overlays;
+    size_t m_lodSignature = 0;
 
     QOpenGLShaderProgram m_meshProgram;
     QOpenGLShaderProgram m_lineProgram;

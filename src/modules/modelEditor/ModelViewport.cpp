@@ -93,7 +93,11 @@ ModelViewport::ModelViewport(ModelDocument* doc, PreviewState* preview, QWidget*
         m_meshDirty = true;
         frameModel();
     });
-    connect(m_doc, &ModelDocument::attachmentsChanged, this, qOverload<>(&ModelViewport::update));
+    connect(m_doc, &ModelDocument::attachmentsChanged, this, [this] {
+        if (lodSignature() != m_lodSignature) m_meshDirty = true;
+        update();
+    });
+    connect(m_preview, &PreviewState::previewLodChanged, this, qOverload<>(&ModelViewport::update));
     connect(m_doc, &ModelDocument::selectionChanged, this, qOverload<>(&ModelViewport::update));
     connect(m_preview, &PreviewState::poseChanged, this, qOverload<>(&ModelViewport::update));
 }
@@ -373,12 +377,38 @@ void ModelViewport::SourceMesh::fill(const KModelData& model)
         }
         for (uint32_t i : mesh.indices) indices.push_back(base + i);
     }
+
+    // Second pass so LOD 0 stays one contiguous run at the start.
+    uint32_t base = 0;
+    for (size_t meshIndex = 0; meshIndex < model.meshes.size(); ++meshIndex) {
+        const KModelMesh& mesh = model.meshes[meshIndex];
+        lodSections.resize(std::max(lodSections.size(), model.lods.size()));
+        for (size_t level = 0; level < model.lods.size(); ++level) {
+            std::vector<Section>& out = lodSections[level];
+            if (level >= mesh.lods.size()) {
+                for (const Section& section : sections)
+                    if (section.mesh == int(meshIndex)) out.push_back(section);
+                continue;
+            }
+            const KModelMeshLod& lod = mesh.lods[level];
+            const size_t firstIndex = indices.size();
+            for (size_t p = 0; p < lod.primitives.size(); ++p) {
+                const KModelPrimitive& prim = lod.primitives[p];
+                if (size_t(prim.firstIndex) + prim.indexCount > lod.indices.size()) continue;
+                out.push_back({firstIndex + prim.firstIndex, prim.indexCount, int(meshIndex), int(p), int(level) + 1});
+            }
+            for (uint32_t i : lod.indices) indices.push_back(base + i);
+        }
+        base += uint32_t(mesh.vertices.size());
+    }
 }
 
 int ModelViewport::Section::slot(const KModelData& model) const
 {
     if (mesh < 0 || size_t(mesh) >= model.meshes.size() || primitive < 0) return -1;
-    const std::vector<KModelPrimitive>& prims = model.meshes[size_t(mesh)].primitives;
+    const KModelMesh& source = model.meshes[size_t(mesh)];
+    if (lod > 0 && size_t(lod) > source.lods.size()) return -1;
+    const std::vector<KModelPrimitive>& prims = lod > 0 ? source.lods[size_t(lod) - 1].primitives : source.primitives;
     return size_t(primitive) < prims.size() ? prims[size_t(primitive)].materialIndex : -1;
 }
 
@@ -603,9 +633,20 @@ void ModelViewport::bindMaterial(const std::string& contentPath, const QVector3D
 void ModelViewport::rebuildStaticMesh()
 {
     m_meshDirty = false;
+    m_lodSignature = lodSignature();
     m_src.fill(m_doc->model());
     m_skinned.assign(m_src.node.size() * kMeshStride, 0.0f);
     m_indicesPending = true;
+}
+
+size_t ModelViewport::lodSignature() const
+{
+    const KModelData& model = m_doc->model();
+    size_t h = model.lods.size();
+    for (const KModelMesh& mesh : model.meshes)
+        for (const KModelMeshLod& lod : mesh.lods)
+            h = h * 31 + lod.indices.size() * 7 + lod.primitives.size() + (lod.indices.empty() ? 0 : lod.indices.front());
+    return h;
 }
 
 void ModelViewport::skinMesh()
@@ -846,7 +887,8 @@ void ModelViewport::paintGL()
         }
         // slot material, else the model default (no entity here to override either)
         const KModelData& model = m_doc->model();
-        for (const Section& section : m_src.sections) {
+        const int lod = std::clamp(m_preview->previewLod(), 0, int(m_src.lodSections.size()));
+        for (const Section& section : lod == 0 ? m_src.sections : m_src.lodSections[size_t(lod) - 1]) {
             std::string path;
             const int slot = section.slot(model);
             if (slot >= 0 && size_t(slot) < model.materials.size()) path = model.materials[size_t(slot)].materialPath;

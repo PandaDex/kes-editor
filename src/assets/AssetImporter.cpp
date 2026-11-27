@@ -108,6 +108,8 @@ void AssetImporter::import(const QStringList &files, const QString &destFolder)
                 job.flags << "--no-mesh";
             if (!modelChoice.animations)
                 job.flags << "--no-anims";
+            if (modelChoice.mesh && modelChoice.lodCount >= 0)
+                job.flags << QString("--lods=%1").arg(modelChoice.lodCount);
             if (animationsOnly && !modelChoice.targetModel.isEmpty())
                 job.output = QFileInfo(modelChoice.targetModel).absoluteFilePath();
         }
