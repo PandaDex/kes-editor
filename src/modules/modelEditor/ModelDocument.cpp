@@ -41,6 +41,13 @@ ModelDocument::ModelDocument(QObject* parent) : QObject(parent)
     connect(&m_undo, &QUndoStack::cleanChanged, this, [this](bool clean) { emit modifiedChanged(!clean); });
 }
 
+// The undo stack is a member: clearing it emits cleanChanged into tabs being destroyed.
+ModelDocument::~ModelDocument()
+{
+    blockSignals(true);
+    m_undo.blockSignals(true);
+}
+
 bool ModelDocument::load(const QString& path, QString* error)
 {
     KModelData model;

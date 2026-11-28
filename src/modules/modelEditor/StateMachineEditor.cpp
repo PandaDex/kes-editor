@@ -289,6 +289,14 @@ namespace kme
         rebuild();
     }
 
+    // ~QGraphicsScene removes the items, which emits selectionChanged into this (by then
+    // destroyed) subclass's signal; remove them while it still exists, without signals.
+    StateMachineScene::~StateMachineScene()
+    {
+        blockSignals(true);
+        clear();
+    }
+
     void StateMachineScene::scheduleRebuild()
     {
         if (m_rebuildQueued) return;

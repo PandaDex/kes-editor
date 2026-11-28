@@ -192,7 +192,7 @@ NodeLibrary::NodeLibrary()
 
     add("unpackNormal", "Unpack Normal", "Texture", "Decode a normal map sample to a tangent-space normal for the output's Normal input.")
         .in("RGB", F3, V({0.5, 0.5, 1.0})).in("Strength", F, V({1.0}))
-        .out("Normal", F3, "normalize(float3(({RGB}.xy * 2.0 - 1.0) * {Strength}, {RGB}.z * 2.0 - 1.0))");
+        .out("Normal", F3, "normalize(float3(({RGB}.xy * 2.0 - 1.0) * {Strength}, sqrt(saturate(1.0 - dot({RGB}.xy * 2.0 - 1.0, {RGB}.xy * 2.0 - 1.0)))))");
 
     add("checker", "Checkerboard", "Procedural", "0/1 checker pattern.")
         .in("UV", F2, {}, "input.uv").in("Scale", F, V({8.0}))

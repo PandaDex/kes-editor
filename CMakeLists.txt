@@ -23,6 +23,8 @@ add_library(forge_engine STATIC
     ${KES_ENGINE_DIR}/particle_asset.cpp
     ${KES_ENGINE_DIR}/particle_graph.cpp
     ${KES_ENGINE_DIR}/particle_sim.cpp
+    ${KES_ENGINE_DIR}/texture_format.cpp
+    ${KES_ENGINE_DIR}/texture_cook.cpp
     engine/EngineFileIo.cpp)
 target_include_directories(forge_engine PUBLIC ${KES_ENGINE_DIR})
 target_compile_definitions(forge_engine PUBLIC KES_PROFILING=0 _CRT_SECURE_NO_WARNINGS NOMINMAX)
@@ -38,6 +40,12 @@ if(NOT TARGET meshoptimizer)
     add_subdirectory("${_forge_meshopt_dir}" "${CMAKE_BINARY_DIR}/external/meshoptimizer" EXCLUDE_FROM_ALL)
 endif()
 target_link_libraries(forge_engine PRIVATE meshoptimizer)
+
+# Compressonator CMP_Core for texture cooking.
+if(NOT TARGET CMP_Core)
+    include("${KES_ENGINE_DIR}/../cmake/KesCompressonator.cmake")
+endif()
+target_link_libraries(forge_engine PRIVATE CMP_Core)
 
 # RmlUi + FreeType for the .rml preview, the same submodules and options as cmake/KesUi.cmake,
 # always static here.
@@ -136,7 +144,7 @@ add_custom_command(TARGET forge POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_dire
 
 include(CTest)
 if(BUILD_TESTING)
-    foreach(test shadergraph_test modeleditor_test animstatemachine_test localization_test project_test particles_test rmlpreview_test particleview_test assetbrowser_test layout_test assetdrop_test)
+    foreach(test shadergraph_test modeleditor_test animstatemachine_test localization_test project_test particles_test rmlpreview_test particleview_test assetbrowser_test layout_test assetdrop_test texture_test)
         add_executable(forge_${test} tests/${test}.cpp)
         target_link_libraries(forge_${test} PRIVATE forge_core)
         target_compile_definitions(forge_${test} PRIVATE KES_GAME_CONTENT="${CMAKE_CURRENT_SOURCE_DIR}/../../game/content")

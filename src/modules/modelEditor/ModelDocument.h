@@ -36,6 +36,7 @@ class ModelDocument : public QObject {
     Q_OBJECT
 public:
     explicit ModelDocument(QObject* parent = nullptr);
+    ~ModelDocument() override;
 
     bool isOpen() const { return !m_path.isEmpty(); }
     const QString& path() const { return m_path; }

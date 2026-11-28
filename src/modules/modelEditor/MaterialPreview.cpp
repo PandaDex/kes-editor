@@ -1,5 +1,6 @@
 #include "MaterialPreview.h"
 
+#include "core/MaterialLibrary.h"
 #include "text_block_file.h"
 
 #include <QDataStream>
@@ -18,33 +19,11 @@ QString unquote(const std::string& raw)
     return v;
 }
 
-// same layout as engine/texture_file.cpp; only the top mip is read
-QImage loadKTex(const QString& path)
-{
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) return {};
-    QDataStream in(&file);
-    in.setByteOrder(QDataStream::LittleEndian);
-    quint32 magic = 0, version = 0, sourceLength = 0;
-    in >> magic >> version >> sourceLength;
-    if (magic != 0x5845544Bu || version != 1u) return {};
-    if (in.skipRawData(int(sourceLength)) != int(sourceLength)) return {};
-    quint32 width = 0, height = 0, format = 0, flags = 0, mips = 0, size = 0;
-    in >> width >> height >> format >> flags >> mips >> size;
-    if (in.status() != QDataStream::Ok || format != 1 || width == 0 || height == 0 || width > 16384 ||
-        height > 16384 || quint64(size) < quint64(width) * height * 4)
-        return {};
-    QImage image(int(width), int(height), QImage::Format_RGBA8888);
-    for (quint32 y = 0; y < height; ++y)
-        if (in.readRawData(reinterpret_cast<char*>(image.scanLine(int(y))), int(width * 4)) != int(width * 4)) return {};
-    return image;
-}
-
 } // namespace
 
 QImage loadTextureImage(const QString& absolutePath)
 {
-    if (QFileInfo(absolutePath).suffix().compare("ktex", Qt::CaseInsensitive) == 0) return loadKTex(absolutePath);
+    if (QFileInfo(absolutePath).suffix().compare("ktex", Qt::CaseInsensitive) == 0) return MaterialLibrary::loadTexture(absolutePath);
     QImage image(absolutePath);
     return image.isNull() ? image : image.convertToFormat(QImage::Format_RGBA8888);
 }

@@ -3,6 +3,7 @@
 #include "assets/AssetTypeMap.h"
 #include "assets/ModelImportDialog.h"
 #include "core/EditorContext.h"
+#include "core/TextureFile.h"
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -112,6 +113,12 @@ void AssetImporter::import(const QStringList &files, const QString &destFolder)
                 job.flags << QString("--lods=%1").arg(modelChoice.lodCount);
             if (animationsOnly && !modelChoice.targetModel.isEmpty())
                 job.output = QFileInfo(modelChoice.targetModel).absoluteFilePath();
+        }
+        else if (rule->output == "ktex")
+        {
+            const QString groups = TextureFile::groupsPath(m_ctx->project());
+            if (!groups.isEmpty() && QFileInfo::exists(groups))
+                job.flags << "--texture-groups=" + QDir::toNativeSeparators(groups);
         }
         QDir().mkpath(QFileInfo(job.output).absolutePath());
         if (job.writesFile && QFileInfo::exists(job.output))

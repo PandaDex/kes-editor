@@ -268,7 +268,9 @@ namespace kme
 
     AnimGraphDocument::~AnimGraphDocument()
     {
+        // The undo stack is a member: clearing it emits cleanChanged into tabs being destroyed.
         blockSignals(true);
+        m_undo.blockSignals(true);
         qDeleteAll(m_machines);
         m_machines.clear();
     }

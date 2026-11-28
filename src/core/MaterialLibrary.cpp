@@ -1,4 +1,5 @@
 #include "core/MaterialLibrary.h"
+#include "core/TextureFile.h"
 #include <QPainter>
 #include <QDataStream>
 #include <QDir>
@@ -97,48 +98,6 @@ namespace
         }
         return blocks;
     }
-
-    QImage loadKTex(const QString &path, QString *error)
-    {
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly))
-        {
-            if (error)
-                *error = file.errorString();
-            return {};
-        }
-        QDataStream in(&file);
-        in.setByteOrder(QDataStream::LittleEndian);
-        quint32 magic = 0, version = 0, sourceLength = 0;
-        in >> magic >> version >> sourceLength;
-        if (magic != 0x5845544Bu) // "KTEX"
-        {
-            if (error)
-                *error = "not a .ktex file";
-            return {};
-        }
-        in.skipRawData(int(sourceLength));
-        quint32 width = 0, height = 0, format = 0, flags = 0, mips = 0, size = 0;
-        in >> width >> height >> format >> flags >> mips >> size;
-        if (in.status() != QDataStream::Ok || format != 1 || width == 0 || height == 0 ||
-            width > 16384 || height > 16384 || quint64(size) < quint64(width) * height * 4)
-        {
-            if (error)
-                *error = "unsupported .ktex layout";
-            return {};
-        }
-        QImage image(int(width), int(height), QImage::Format_RGBA8888);
-        for (quint32 y = 0; y < height; ++y)
-        {
-            if (in.readRawData(reinterpret_cast<char *>(image.scanLine(int(y))), int(width * 4)) != int(width * 4))
-            {
-                if (error)
-                    *error = "truncated .ktex pixels";
-                return {};
-            }
-        }
-        return image;
-    }
 }
 
 MaterialLibrary::MaterialLibrary(QObject *parent) : QObject(parent) {}
@@ -189,7 +148,12 @@ QSize MaterialLibrary::textureSize(const QString &path) const
 QImage MaterialLibrary::loadTexture(const QString &absolutePath, QString *error)
 {
     if (QFileInfo(absolutePath).suffix().compare("ktex", Qt::CaseInsensitive) == 0)
-        return loadKTex(absolutePath, error);
+    {
+        TextureFileData texture;
+        if (!TextureFile::read(absolutePath, texture, error))
+            return {};
+        return TextureFile::mipImage(texture, 0);
+    }
     QImage image(absolutePath);
     if (image.isNull())
     {

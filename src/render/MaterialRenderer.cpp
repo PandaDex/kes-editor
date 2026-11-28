@@ -362,7 +362,8 @@ void main()
         float occlusion = 1.0;
         if (has(16))
         {
-            vec3 tangentNormal = texture(uNormalTex, vUv).xyz * 2.0 - 1.0;
+            vec2 nxy = texture(uNormalTex, vUv).xy * 2.0 - 1.0;
+            vec3 tangentNormal = vec3(nxy, sqrt(clamp(1.0 - dot(nxy, nxy), 0.0, 1.0)));
             tangentNormal.xy *= uPbr.z;
             n = perturbNormal(geometricNormal, vPos, vUv, normalize(tangentNormal));
         }

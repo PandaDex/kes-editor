@@ -88,6 +88,7 @@ namespace kme
         Q_OBJECT
     public:
         explicit StateMachineScene(StateMachineModel* machine, QObject* parent = nullptr);
+        ~StateMachineScene() override;
 
         StateMachineModel* machine() const { return m_machine; }
         StateItem* stateItem(int id) const { return m_states.value(id); }
